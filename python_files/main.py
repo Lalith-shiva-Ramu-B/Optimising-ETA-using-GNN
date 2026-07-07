@@ -125,9 +125,9 @@ def breached_find(corridor_df):
     #print(breached_coordiors[['source_center','destination_center','route_type','total_trips','breaches','breach_time','time_of_day','sla_breach_rate','median_delay_ratio']].head(5))
     return breached_coordiors
 
-corridor_df=corridor_setup(df)
-breached_df=breached_find(corridor_df)
-critical_hubs, hub_metrics_df=critical_hub_find(corridor_df)
+# corridor_df=corridor_setup(df)
+# breached_df=breached_find(corridor_df)
+# critical_hubs, hub_metrics_df=critical_hub_find(corridor_df)
 def build_graph(corridor_df: pd.DataFrame, weight_col: str = "median_delay_ratio"):
     graph = nx.DiGraph()
     for _, row in corridor_df.iterrows():

@@ -21,7 +21,7 @@ def load_data(path):
     data= pd.read_csv(path)
     return data
 
-upload_file=st.file_uploader("Choose the file")
+upload_file=st.sidebar.file_uploader("Choose the file")
 if upload_file is None:
     st.info("upload a file ")
     st.stop()
