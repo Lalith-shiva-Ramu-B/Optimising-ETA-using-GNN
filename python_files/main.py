@@ -12,7 +12,7 @@ import random
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error
 from sklearn.preprocessing import StandardScaler
-from streamlit_app import df
+#from streamlit_app import df
 
 SEED = 42
 def set_seed(seed: int = SEED):
@@ -141,7 +141,7 @@ def encode_route_types(df: pd.DataFrame, corridor_df: pd.DataFrame):
     print("route mapping:", route_mapping)
     df["route_type_encoded"] = df["route_type"].map(route_mapping).fillna(0).astype(int)
     return df, route_mapping
-df,route_mapping=encode_route_types(df,corridor_df)
+#df,route_mapping=encode_route_types(df,corridor_df)
 BASE_FEATURES = ["segment_osrm_time", "segment_osrm_distance", "time_of_day", "route_type_encoded"]
 def prepare_graphsage_dataset(
     df: pd.DataFrame,

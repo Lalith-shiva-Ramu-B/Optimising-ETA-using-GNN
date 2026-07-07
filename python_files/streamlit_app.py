@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from datetime import datetime
-from main import *
+from main import (corridor_setup,critical_hub_find,breached_find,build_graph,encode_route_types,prepare_graphsage_datase)
 from plots import (
     kpi_indicator,
     plot_bottleneck_bar,
