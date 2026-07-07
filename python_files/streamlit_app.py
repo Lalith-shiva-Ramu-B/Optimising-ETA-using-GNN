@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from datetime import datetime
-from main import (corridor_setup,critical_hub_find,breached_find,build_graph,encode_route_types,prepare_graphsage_datase)
+from main import (corridor_setup,critical_hub_find,breached_find,time_bucket,build_graph,graph_data,within_15_pct_accuracy,GraphSAGE)
 from plots import (
     kpi_indicator,
     plot_bottleneck_bar,
@@ -27,6 +27,9 @@ if upload_file is None:
     st.stop()
 
 df=load_data(upload_file)
+df['od_start_time'] = pd.to_datetime( df['od_start_time'], format='%d-%m-%Y %H:%M',errors='coerce')
+df['hour'] = df['od_start_time'].dt.hour 
+df['time_of_day'] =df['hour'].apply(time_bucket)
 page = st.sidebar.radio(
     "Dashboard section",
     (
@@ -126,28 +129,44 @@ elif page == "Bottleneck Analysis":
     st.plotly_chart(plot_bottleneck_bar(hub_metrics_df, "Clustering"), use_container_width=True)
 
 elif page == "ML Model":
+        import torch
+        import torch.nn as nn
+        from sklearn.ensemble import RandomForestRegressor
+        from sklearn.metrics import mean_absolute_error
+        import joblib
         st.subheader("Baseline (Random Forest) vs. GraphSAGE")
+        test_src, test_dst, tab_test,X_train_base, y_train,X_test_base,y_test,graph =graph_data(df)
+        model=joblib.load('graphsage_model_ETA.joblib')
+        with torch.no_grad():
+             pred_graph = model(graph.x, graph.edge_index, test_src, test_dst, tab_test).cpu().numpy()
+
+        rf_base = RandomForestRegressor(n_estimators=100,random_state=42, n_jobs=-1)
+        rf_base.fit(X_train_base, y_train)
+        y_pred_base = rf_base.predict(X_test_base)
+        base_mae = mean_absolute_error(y_test, y_pred_base)
+        graph_mae = mean_absolute_error(y_test, pred_graph)
+        base_acc = within_15_pct_accuracy(y_test, y_pred_base)
+        graph_acc = within_15_pct_accuracy(y_test, pred_graph)
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Baseline MAE (min)", f"{metrics['base_mae']:.2f}")
-        col2.metric("GraphSAGE MAE (min)", f"{metrics['graph_mae']:.2f}")
-        col3.metric("Baseline within-15% accuracy", f"{metrics['base_acc']:.1f}%")
-        col4.metric("GraphSAGE within-15% accuracy", f"{metrics['graph_acc']:.1f}%")
+        col1.metric("Baseline MAE (min)", f"{base_mae:.2f}")
+        col2.metric("GraphSAGE MAE (min)", f"{graph_mae:.2f}")
+        col3.metric("Baseline within-15% accuracy", f"{base_acc:.1f}%")
+        col4.metric("GraphSAGE within-15% accuracy", f"{graph_acc:.1f}%")
 
         st.plotly_chart(
             plot_model_comparison_bar(
-                metrics["base_mae"], metrics["graph_mae"], metrics["base_acc"], metrics["graph_acc"]
-            ),
+                base_mae, graph_mae, base_acc,graph_acc),
             use_container_width=True,
         )
 
         col5, col6 = st.columns(2)
         with col5:
             st.plotly_chart(
-                plot_pred_vs_actual(metrics["y_test"], metrics["pred_graph"], "GraphSAGE: Predicted vs. Actual"),
+                plot_pred_vs_actual(y_test, pred_graph, "GraphSAGE: Predicted vs. Actual"),
                 use_container_width=True,
             )
         with col6:
             st.plotly_chart(
-                plot_error_histogram(metrics["y_test"], metrics["pred_graph"], "GraphSAGE Prediction Error"),
+                plot_error_histogram(y_test, pred_graph, "GraphSAGE Prediction Error"),
                 use_container_width=True,
             )

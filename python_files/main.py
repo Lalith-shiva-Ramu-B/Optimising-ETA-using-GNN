@@ -9,8 +9,6 @@ from torch_geometric.data import Data
 import seaborn as sns
 import matplotlib.pyplot as plt
 import random 
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_error
 from sklearn.preprocessing import StandardScaler
 #from streamlit_app import df
 
@@ -134,94 +132,16 @@ def build_graph(corridor_df: pd.DataFrame, weight_col: str = "median_delay_ratio
         graph.add_edge(row["source_center"], row["destination_center"], weight=row[weight_col])
     return graph
 
-def encode_route_types(df: pd.DataFrame, corridor_df: pd.DataFrame):
-    df = df.copy()
-    unique_routes = corridor_df["route_type"].unique()
-    route_mapping = {route: idx for idx, route in enumerate(unique_routes)}
-    print("route mapping:", route_mapping)
-    df["route_type_encoded"] = df["route_type"].map(route_mapping).fillna(0).astype(int)
-    return df, route_mapping
-#df,route_mapping=encode_route_types(df,corridor_df)
-BASE_FEATURES = ["segment_osrm_time", "segment_osrm_distance", "time_of_day", "route_type_encoded"]
-def prepare_graphsage_dataset(
-    df: pd.DataFrame,
-    corridor_df: pd.DataFrame):
-     set_seed(SEED)
-     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-     test_df = df[df["data"] == "test"].copy()
-     train_df = df[df["data"] == "training"].copy()
+def time_bucket(hour):
+        if (0 <= hour < 6) or (22<=hour<24): 
+            return 0      # Night
+        elif 6 <= hour < 12: 
+            return 1   # Morning
+        elif 12 <= hour < 18: 
+            return 2  # Afternoon
+        else: 
+            return 3   # Evening
 
-     train_df[BASE_FEATURES] = train_df[BASE_FEATURES].fillna(0)
-     test_df[BASE_FEATURES] = test_df[BASE_FEATURES].fillna(0)
-
-     x_train_base_raw = train_df[BASE_FEATURES].values
-     x_test_base_raw = test_df[BASE_FEATURES].values
-     scaler = StandardScaler()
-     X_train_base = scaler.fit_transform(x_train_base_raw)
-     X_test_base = scaler.transform(x_test_base_raw)
-
-     y_train = train_df["segment_actual_time"].values.astype(np.float32)
-     y_test = test_df["segment_actual_time"].values.astype(np.float32)
-
-
-# 4. PREPARE SEPARATE TRAIN & TEST PARAMETERS
-     all_nodes = pd.concat([
-    train_df["source_center"], train_df["destination_center"],
-    test_df["source_center"], test_df["destination_center"]
-]).dropna().unique()
-
-     node_mapping = {node: i for i, node in enumerate(all_nodes)}
-     num_nodes = len(all_nodes)
-
-     for frame in [train_df, test_df]:
-         frame["src_idx"] = frame["source_center"].map(node_mapping)
-         frame["dst_idx"] = frame["destination_center"].map(node_mapping)
-
-     train_df = train_df.dropna(subset=["src_idx", "dst_idx"]).copy()
-     test_df = test_df.dropna(subset=["src_idx", "dst_idx"]).copy()
-
-     train_df["src_idx"] = train_df["src_idx"].astype(int)
-     train_df["dst_idx"] = train_df["dst_idx"].astype(int)
-     test_df["src_idx"] = test_df["src_idx"].astype(int)
-     test_df["dst_idx"] = test_df["dst_idx"].astype(int)
-
-# Node features built only from training graph
-     src_counts = np.bincount(train_df["src_idx"].values, minlength=num_nodes)
-     dst_counts = np.bincount(train_df["dst_idx"].values, minlength=num_nodes)
-     tot_counts = src_counts + dst_counts
-
-     node_features = np.stack([
-    np.log1p(src_counts),
-    np.log1p(dst_counts),
-    np.log1p(tot_counts),
-], axis=1).astype(np.float32)
-
-     x = torch.tensor(node_features, dtype=torch.float)
-
-     edge_index = torch.tensor(
-    np.vstack([train_df["src_idx"].values, train_df["dst_idx"].values]),
-    dtype=torch.long
-)
-
-# Make message passing stronger by adding reverse edges
-     edge_index = torch.cat([edge_index, edge_index.flip(0)], dim=1)
-
-     graph_data = Data(x=x, edge_index=edge_index)
-     graph_data = graph_data.to(device)
-     train_df = train_df.sort_values(by=["src_idx", "dst_idx"]).reset_index(drop=True)
-     test_df = test_df.sort_values(by=["src_idx", "dst_idx"]).reset_index(drop=True)
-
-     train_src = torch.tensor( train_df["src_idx"].values, dtype=torch.long, device=device)
-     train_dst = torch.tensor(train_df["dst_idx"].values, dtype=torch.long, device=device)
-     test_src = torch.tensor(test_df["src_idx"].values, dtype=torch.long, device=device)
-     test_dst = torch.tensor(test_df["dst_idx"].values, dtype=torch.long, device=device)
-
-     tab_train = torch.tensor(X_train_base, dtype=torch.float32, device=device)
-     tab_test = torch.tensor(X_test_base, dtype=torch.float32, device=device)
-     y_train_t = torch.tensor(y_train, dtype=torch.float32, device=device)
-     y_test_t = torch.tensor(y_test, dtype=torch.float32, device=device)
-
-     return graph_data,train_src,train_dst,y_train_t,y_test_t ,test_src,test_dst, tab_train,tab_test, y_train,y_test,scaler,route_mapping,train_df,test_df,X_train_base,X_test_base
 class GraphSAGE(nn.Module):
     def __init__(self, in_channels, hidden_channels, tabular_dim, dropout=0.2):
         super().__init__()
@@ -251,50 +171,82 @@ class GraphSAGE(nn.Module):
         z = self.encode(x, edge_index)
         edge_z = torch.cat([z[src_idx], z[dst_idx], tabular_x], dim=1)
         out = self.mlp(edge_z).squeeze(-1)
-        return out
-    
-def train_model(graph_data,train_src,train_dst ,y_train_t,y_test_t,test_src,test_dst, tab_train,tab_test, y_train,y_test,scaler,route_mapping,train_df,test_df,X_train_base,X_test_base
-):
-    model = GraphSAGE(
-    in_channels=graph_data.x.shape[1],
-    hidden_channels=32,
-    tabular_dim=tab_train.shape[1],
-    dropout=0.2
+        return out    
+def graph_data(df):
+    df = df.copy()
+    unique_routes = df["route_type"].unique()
+    route_mapping = {route: idx for idx, route in enumerate(unique_routes)}
+    print("route mapping:", route_mapping)
+    df["route_type_encoded"] = df["route_type"].map(route_mapping).fillna(0).astype(int)
+ 
+    BASE_FEATURES = ["segment_osrm_time", "segment_osrm_distance", "time_of_day", "route_type_encoded"]
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    test_df = df[df["data"] == "test"].copy()
+    train_df = df[df["data"] == "training"].copy()
+
+    train_df[BASE_FEATURES] = train_df[BASE_FEATURES].fillna(0)
+    test_df[BASE_FEATURES] = test_df[BASE_FEATURES].fillna(0)
+
+    x_train_base_raw = train_df[BASE_FEATURES].values
+    x_test_base_raw = test_df[BASE_FEATURES].values
+    scaler = StandardScaler()
+    X_train_base = scaler.fit_transform(    x_train_base_raw)
+    X_test_base = scaler.transform(x_test_base_raw)
+
+    y_train = train_df["segment_actual_time"].values.astype(np.float32)
+    y_test = test_df["segment_actual_time"].values.astype(np.float32)
+
+
+# 4. PREPARE SEPARATE TRAIN & TEST PARAMETERS
+    all_nodes = pd.concat([
+    train_df["source_center"], train_df["destination_center"],
+    test_df["source_center"], test_df["destination_center"]
+]).dropna().unique()
+
+    node_mapping = {node: i for i, node in enumerate(all_nodes)}
+    num_nodes = len(all_nodes)
+
+    for frame in [train_df, test_df]:
+         frame["src_idx"] = frame["source_center"].map(node_mapping)
+         frame["dst_idx"] = frame["destination_center"].map(node_mapping)
+
+    train_df = train_df.dropna(subset=["src_idx", "dst_idx"]).copy()
+    test_df = test_df.dropna(subset=["src_idx", "dst_idx"]).copy()
+
+# Node features built only from training graph
+    src_counts = np.bincount(train_df["src_idx"].values, minlength=num_nodes)
+    dst_counts = np.bincount(train_df["dst_idx"].values, minlength=num_nodes)
+    tot_counts = src_counts + dst_counts
+
+    node_features = np.stack([
+    np.log1p(src_counts),
+    np.log1p(dst_counts),
+    np.log1p(tot_counts),
+], axis=1).astype(np.float32)
+
+    x = torch.tensor(node_features, dtype=torch.float)
+    edge_index = torch.tensor(
+    np.vstack([train_df["src_idx"].values, train_df["dst_idx"].values]),
+    dtype=torch.long
 )
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-3)
-    loss_fn = nn.MSELoss()
-    print("Graph Sage model Training started")
-    for epoch in range(1, 501):
-        model.train()
-        optimizer.zero_grad()
-        pred = model(graph_data.x, graph_data.edge_index, train_src, train_dst, tab_train)
-        loss = loss_fn(pred, y_train_t)
-        loss.backward()
-        optimizer.step()
-    
+# Make message passing stronger by adding reverse edges
+    edge_index = torch.cat([edge_index, edge_index.flip(0)], dim=1)
+    graph = Data(x=x, edge_index=edge_index)
+    graph = graph.to(device)
+    train_df =   train_df.sort_values(by=["src_idx", "dst_idx"]).reset_index(drop=True)  
+    test_df = test_df.sort_values(by=["src_idx", "dst_idx"]).reset_index(drop=True)
+    test_src = torch.tensor(    test_df["src_idx"].values, dtype=torch.long, device=device)
+    test_dst = torch.tensor(test_df["dst_idx"].values, dtype=torch.long, device=device)
 
-        if epoch % 100 == 0 or epoch == 1:
-            print(f"Epoch {epoch:03d} | Train MSE: {loss.item():.4f}")
+    tab_train = torch.tensor(X_train_base, dtype=torch.float32, device=device)
+    tab_test = torch.tensor(X_test_base, dtype=torch.float32, device=device)
 
-    model.eval()
-    with torch.no_grad():
-        pred_graph = model(graph_data.x, graph_data.edge_index, test_src, test_dst, tab_test).cpu().numpy()
-
-    rf_base = RandomForestRegressor(n_estimators=100,random_state=SEED, n_jobs=-1)
-    rf_base.fit(X_train_base, y_train)
-    y_pred_base = rf_base.predict(X_test_base)
-
-    return y_pred_base,pred_graph
+    return  test_src, test_dst, tab_test,X_train_base, y_train,X_test_base,y_test,graph
 
 def within_15_pct_accuracy(y_true, y_pred):
     # Prevent division by zero
     y_true_safe = np.where(y_true == 0, 1e-6, y_true)
     error_ratio = np.abs(y_true - y_pred) / y_true_safe
     return np.mean(error_ratio <= 0.15) * 100
-
-    base_mae = mean_absolute_error(y_test, y_pred_base)
-    graph_mae = mean_absolute_error(y_test, pred_graph)
-
-    base_acc = within_15_pct_accuracy(y_test, y_pred_base)
-    graph_acc = within_15_pct_accuracy(y_test, pred_graph)
