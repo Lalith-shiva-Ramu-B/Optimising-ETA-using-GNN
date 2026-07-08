@@ -250,3 +250,77 @@ def within_15_pct_accuracy(y_true, y_pred):
     y_true_safe = np.where(y_true == 0, 1e-6, y_true)
     error_ratio = np.abs(y_true - y_pred) / y_true_safe
     return np.mean(error_ratio <= 0.15) * 100
+
+class RouteDecisionFramework:
+    def __init__(self, hub_risk_lookup,cost_per_km_ftl=40, cost_per_km_carting=25, 
+                 ftl_capacity=500, carting_capacity=100, 
+                 sla_penalty_per_hour=1000):
+        # Base operational costs
+        self.hub_risk_lookup=hub_risk_lookup
+        self.cost_per_km_ftl = cost_per_km_ftl
+        self.cost_per_km_carting = cost_per_km_carting
+        
+        # Vehicle capacities (packages)
+        self.ftl_capacity = ftl_capacity
+        self.carting_capacity = carting_capacity
+        
+        # Cost of a late delivery (financial risk)
+        self.sla_penalty_per_hour = sla_penalty_per_hour
+
+    def calculate_trip_cost(self, distance_km, route_type, current_volume):
+        if route_type == 'FTL':
+            total_trip_cost = self.cost_per_km_ftl * distance_km
+            # FTL is only cost-effective if it's full. If we send a half-empty truck, cost per unit spikes.
+            cost_per_package = total_trip_cost / max(current_volume, 1) 
+        else: 
+            total_trip_cost = self.cost_per_km_carting * distance_km
+            cost_per_package = total_trip_cost / min(current_volume, self.carting_capacity)
+            
+        return cost_per_package
+
+    def assess_structural_risk(self, source_center, destination_center,time_of_day):
+        src_risk = self.hub_risk_lookup.get(source_center, 0.0)
+        dst_risk = self.hub_risk_lookup.get(destination_center, 0.0)
+        risk_multiplier = 1.0 + 0.5 * max(src_risk, dst_risk)
+        if time_of_day in [0, 3]:
+            risk_multiplier *= 1.05
+        return risk_multiplier
+
+    def evaluate_tradeoff(self, distance_km, current_volume, 
+                          pred_eta_ftl, pred_eta_carting, sla_deadline, 
+                          source_center, destination_center,time_of_day):
+        # 1.Financial Cost
+        cost_ftl = self.calculate_trip_cost(distance_km, 'FTL', current_volume)
+        cost_carting = self.calculate_trip_cost(distance_km, 'Carting', current_volume)
+        
+        # 2.SLA Risk Cost (Time Trade-off)
+        # If predicted ETA exceeds the SLA deadline, financial penalties is applied
+        risk_ftl = max(0, pred_eta_ftl - sla_deadline) * (self.sla_penalty_per_hour / self.ftl_capacity)
+        risk_carting = max(0, pred_eta_carting - sla_deadline) * (self.sla_penalty_per_hour / self.carting_capacity)
+        
+        # 3. Apply Graph Structural Risk
+        # Multiply the SLA risk by the facility's structural chokepoint danger
+        network_risk_factor = self.assess_structural_risk(source_center, destination_center,time_of_day)
+        
+        total_utility_ftl = cost_ftl + (risk_ftl * network_risk_factor)
+        total_utility_carting = cost_carting + (risk_carting * network_risk_factor)
+        
+        # 4. Generate Recommendation
+        if total_utility_carting < total_utility_ftl:
+            recommendation = "Carting"
+            savings = total_utility_ftl - total_utility_carting
+            reason = "Time/Risk savings outweigh the higher transport cost."
+        else:
+            recommendation = "FTL"
+            savings = total_utility_carting - total_utility_ftl
+            reason = "Volume justifies FTL cost efficiency; ETA is within safe SLA margins."
+            
+        return {
+            'Recommendation': recommendation,
+            'Est_Cost_per_Unit_FTL': round(cost_ftl, 2),
+            'Est_Cost_per_Unit_Carting': round(cost_carting, 2),
+            'Utility_Score_Difference': round(savings, 2),
+            'Reasoning': reason
+        }
+
+# --- Example Execution ---

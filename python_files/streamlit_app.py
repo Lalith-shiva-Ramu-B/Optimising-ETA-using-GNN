@@ -2,7 +2,8 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from datetime import datetime
-from main import (corridor_setup,critical_hub_find,breached_find,time_bucket,build_graph,graph_data,within_15_pct_accuracy,GraphSAGE)
+from main import (corridor_setup,critical_hub_find,breached_find,time_bucket,
+                  build_graph,graph_data,within_15_pct_accuracy,GraphSAGE,RouteDecisionFramework)
 from plots import (
     kpi_indicator,
     plot_bottleneck_bar,
@@ -170,3 +171,40 @@ elif page == "ML Model":
                 plot_error_histogram(y_test, pred_graph, "GraphSAGE Prediction Error"),
                 use_container_width=True,
             )
+elif page == "Decision Framework":
+    st.subheader("FTL vs. Carting Route Decision")
+    st.caption(
+        "Enter a shipment's parameters to get a cost/risk-based route recommendation, "
+        "backed by the trained ETA model and the network's structural risk scores."
+    )
+    facilities = sorted(set(corridor_df["source_center"]) | set(corridor_df["destination_center"]))
+    route_types = list(corridor_df["route_type"].unique())
+    time_labels = {0: "Night", 1: "Morning", 2: "Afternoon", 3: "Evening"}
+
+    with st.form("decision_form"):
+        c1, c2 = st.columns(2)
+        with c1:
+            source_center = st.selectbox("Source hub", facilities)
+            destination_center = st.selectbox("Destination hub", facilities, index=min(1, len(facilities) - 1))
+            time_of_day = st.selectbox("Time of day", list(time_labels.keys()), format_func=lambda k: time_labels[k])
+        with c2:
+            distance_km = st.number_input("Distance (km)", min_value=1.0, value=100.0, step=10.0)
+            volume = st.number_input("Shipment volume (packages)", min_value=1.0, value=200.0, step=10.0)
+            sla_deadline_hours = st.number_input("SLA deadline (hours)", min_value=0.5, value=10.0, step=0.5)
+        submitted = st.form_submit_button("Get Recommendation")
+
+risk_lookup = dict(zip(hub_metrics_df["Facility"],hub_metrics_df["SLA_Breach_Contribution_%"]))
+if submitted:
+     framework = RouteDecisionFramework(hub_risk_lookup=risk_lookup) 
+     decision = framework.evaluate_tradeoff(
+    distance_km=distance_km,
+    current_volume=volume,
+    pred_eta_ftl=12.0,       
+    pred_eta_carting=8.0,    
+    sla_deadline=sla_deadline_hours,
+    source_center=source_center , # High network risk
+    destination_center=destination_center,
+       time_of_day=time_of_day
+)
+     for key, value in decision.items():
+          st.write(f"{key}: {value}")
