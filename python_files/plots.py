@@ -6,7 +6,6 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-
 # KPI gauges (kept from the original streamlit_app.py, lightly cleaned up)
 def kpi_indicator(label: str, value: float, prefix: str = "", suffix: str = ""):
     """Single-number KPI card (the original ``plot_metrics`` helper)."""
@@ -174,6 +173,7 @@ def plot_time_of_day_breaches(breached_df: pd.DataFrame):
     )
     fig.update_layout(height=400, margin=dict(l=10, r=10, t=40, b=10))
     return fig
+
 # ML model evaluation
 def plot_model_comparison_bar(base_mae: float, graph_mae: float, base_acc: float, graph_acc: float):
     fig = go.Figure()
@@ -184,7 +184,6 @@ def plot_model_comparison_bar(base_mae: float, graph_mae: float, base_acc: float
     fig.update_layout(barmode="group", height=400, title="Baseline vs. GraphSAGE",
                        margin=dict(l=10, r=10, t=40, b=10))
     return fig
-
 
 def plot_pred_vs_actual(y_true: np.ndarray, y_pred: np.ndarray, title: str):
     fig = px.scatter(
@@ -197,7 +196,6 @@ def plot_pred_vs_actual(y_true: np.ndarray, y_pred: np.ndarray, title: str):
                               line=dict(dash="dash", color="red")))
     fig.update_layout(height=450, margin=dict(l=10, r=10, t=40, b=10))
     return fig
-
 
 def plot_error_histogram(y_true: np.ndarray, y_pred: np.ndarray, title: str):
     errors = np.asarray(y_pred) - np.asarray(y_true)
