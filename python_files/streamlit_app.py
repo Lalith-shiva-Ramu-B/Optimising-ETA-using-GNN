@@ -193,8 +193,8 @@ elif page == "Decision Framework":
             sla_deadline_hours = st.number_input("SLA deadline (hours)", min_value=0.5, value=10.0, step=0.5)
         submitted = st.form_submit_button("Get Recommendation")
 
-risk_lookup = dict(zip(hub_metrics_df["Facility"],hub_metrics_df["SLA_Breach_Contribution_%"]))
-if submitted:
+    risk_lookup = dict(zip(hub_metrics_df["Facility"],hub_metrics_df["SLA_Breach_Contribution_%"]))
+    if submitted:
      framework = RouteDecisionFramework(hub_risk_lookup=risk_lookup) 
      decision = framework.evaluate_tradeoff(
     distance_km=distance_km,
