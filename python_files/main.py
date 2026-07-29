@@ -6,19 +6,14 @@ import torch.nn.functional as F
 from torch_geometric.nn import SAGEConv
 import networkx as nx
 from torch_geometric.data import Data
-import seaborn as sns
-import matplotlib.pyplot as plt
 import random 
 from sklearn.preprocessing import StandardScaler
-#from streamlit_app import df
 
 SEED = 42
 def set_seed(seed: int = SEED):
     random.seed(seed)
     np.random.seed(seed)
     try:
-        import torch  # local import: torch is an optional/heavy dependency
-
         torch.manual_seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
@@ -323,4 +318,3 @@ class RouteDecisionFramework:
             'Reasoning': reason
         }
 
-# --- Example Execution ---

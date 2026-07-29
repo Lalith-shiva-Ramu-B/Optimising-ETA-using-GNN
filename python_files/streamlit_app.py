@@ -18,6 +18,7 @@ from plots import (
 st.set_page_config(page_title='ETA model Dashboard',layout='wide')
 
 st.title("ETA Dashboard")
+@st.cache_data
 def load_data(path):
     data= pd.read_csv(path)
     return data
@@ -135,9 +136,13 @@ elif page == "ML Model":
         from sklearn.ensemble import RandomForestRegressor
         from sklearn.metrics import mean_absolute_error
         import joblib
+        @st.cache_resource
+        def load_model():
+            return joblib.load('graphsage_model_ETA.joblib')
+
         st.subheader("Baseline (Random Forest) vs. GraphSAGE")
         test_src, test_dst, tab_test,X_train_base, y_train,X_test_base,y_test,graph =graph_data(df)
-        model=joblib.load('graphsage_model_ETA.joblib')
+        model= load_model()
         with torch.no_grad():
              pred_graph = model(graph.x, graph.edge_index, test_src, test_dst, tab_test).cpu().numpy()
 
