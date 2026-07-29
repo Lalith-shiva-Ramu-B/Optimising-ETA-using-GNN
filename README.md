@@ -76,7 +76,7 @@ cd ETA_ML_PROJECT
 streamlit run streamlit_app.py
 
 # Usage
-open the streamlit_app in python_files folder then you can open the streamlit application locally 
+Open the deployed Streamlit application using the link provided in the repository description.
 
 #   Results
 Succesfully Identified high risked hubs\
@@ -86,11 +86,8 @@ Interactive business dashboard
 
 ## Future improvements 
 
-1. deploy on Streamlit Cloud
-2. Hyperparameter tuning
+1. Hyperparameter tuning
 
 ## Author
-Boddu Lalith Shiva Ramu\
-B.Tech Mechanical + MBA dual Degree\
-Supply Chain Analytics | Machine Learning | Graphical Neural Networks 
+B. Lalith Shiva Ramu is a PreFinal Year student at IIT Patna (B.Tech, Mechanical Engineering- MBA(IIM Mumbai)). He is a Vahani and Reliance Foundation Scholar with a deep interest in supply chain operations, data analysis, and financial management.
 
