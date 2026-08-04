@@ -136,9 +136,16 @@ elif page == "ML Model":
         from sklearn.ensemble import RandomForestRegressor
         from sklearn.metrics import mean_absolute_error
         import joblib
+        from pathlib import Path
         @st.cache_resource
         def load_model():
-            return joblib.load('graphsage_model_ETA.joblib')
+            BASE_DIR = Path(__file__).resolve().parent
+            MODEL_PATH = BASE_DIR / "model" / "model.joblib"
+
+            st.write("Model path:", MODEL_PATH)
+            st.write("Model exists:", MODEL_PATH.exists())
+
+            return joblib.load(MODEL_PATH)
 
         st.subheader("Baseline (Random Forest) vs. GraphSAGE")
         test_src, test_dst, tab_test,X_train_base, y_train,X_test_base,y_test,graph =graph_data(df)
