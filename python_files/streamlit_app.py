@@ -140,7 +140,7 @@ elif page == "ML Model":
         @st.cache_resource
         def load_model():
             BASE_DIR = Path(__file__).resolve().parent
-            MODEL_PATH = BASE_DIR / "model" / "model.joblib"
+            MODEL_PATH = BASE_DIR  / "graphsage_model_ETA.joblib"
 
             st.write("Model path:", MODEL_PATH)
             st.write("Model exists:", MODEL_PATH.exists())
