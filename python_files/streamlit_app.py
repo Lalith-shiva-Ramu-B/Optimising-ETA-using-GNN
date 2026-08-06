@@ -142,8 +142,8 @@ elif page == "ML Model":
             BASE_DIR = Path(__file__).resolve().parent
             MODEL_PATH = BASE_DIR  / "graphsage_model_ETA.joblib"
 
-            st.write("Model path:", MODEL_PATH)
-            st.write("Model exists:", MODEL_PATH.exists())
+            #st.write("Model path:", MODEL_PATH)
+            #st.write("Model exists:", MODEL_PATH.exists())
 
             return joblib.load(MODEL_PATH)
 

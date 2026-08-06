@@ -29,17 +29,6 @@ def corridor_setup(df):
     df['od_start_time'] = pd.to_datetime( df['od_start_time'], format='%d-%m-%Y %H:%M',errors='coerce')
     df['hour'] =    df['od_start_time'].dt.hour  
     df=df[df['is_cutoff']== True] # droped is_cutoff = false since no pattern followed 
-    def time_bucket(hour):
-        if (0 <= hour < 6) or (22<=hour<24): 
-            return 0      # Night
-        elif 6 <= hour < 12: 
-            return 1   # Morning
-        elif 12 <= hour < 18: 
-            return 2  # Afternoon
-        else: 
-            return 3   # Evening
-
-    df['time_of_day'] =df['hour'].apply(time_bucket)
 
 # Identify Chronically Delayed Corridors (Median delay > 20%)
     corridor_df = df.groupby(['source_center', 'destination_center','route_type','time_of_day']).agg(
