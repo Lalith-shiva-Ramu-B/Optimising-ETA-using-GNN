@@ -155,12 +155,12 @@ class GraphSAGE(nn.Module):
         return out    
 def graph_data(df):
     df = df.copy()
-    unique_routes = df["route_type"].unique()
-    route_mapping = {route: idx for idx, route in enumerate(unique_routes)}
-    print("route mapping:", route_mapping)
-    df["route_type_encoded"] = df["route_type"].map(route_mapping).fillna(0).astype(int)
+    #unique_routes = df["route_type"].unique()
+    #route_mapping = {route: idx for idx, route in enumerate(unique_routes)}
+    #print("route mapping:", route_mapping)
+    #df["route_type_encoded"] = df["route_type"].map(route_mapping).fillna(0).astype(int)
  
-    BASE_FEATURES = ["segment_osrm_time", "segment_osrm_distance", "time_of_day", "route_type_encoded"]
+    BASE_FEATURES = ["segment_osrm_time", "segment_osrm_distance", "time_of_day"]
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     test_df = df[df["data"] == "test"].copy()
@@ -172,7 +172,7 @@ def graph_data(df):
     x_train_base_raw = train_df[BASE_FEATURES].values
     x_test_base_raw = test_df[BASE_FEATURES].values
     scaler = StandardScaler()
-    X_train_base = scaler.fit_transform(    x_train_base_raw)
+    X_train_base = scaler.fit_transform(x_train_base_raw)
     X_test_base = scaler.transform(x_test_base_raw)
 
     y_train = train_df["segment_actual_time"].values.astype(np.float32)

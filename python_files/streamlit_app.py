@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from datetime import datetime
-from main import (corridor_setup,critical_hub_find,breached_find,time_bucket,test_df,
-                  build_graph,graph_data,within_15_pct_accuracy,GraphSAGE,RouteDecisionFramework)
+from main import (corridor_setup,critical_hub_find,breached_find,time_bucket,GraphSAGE,
+                  build_graph,graph_data,within_15_pct_accuracy,RouteDecisionFramework)
 from plots import (
     kpi_indicator,
     plot_bottleneck_bar,
@@ -25,7 +25,7 @@ def load_data(path):
 
 upload_file=st.sidebar.file_uploader("Choose the file")
 if upload_file is None:
-    st.info("upload a file ")
+    st.info("upload a file in sidebar")
     st.stop()
 
 df=load_data(upload_file)
@@ -139,74 +139,116 @@ elif page == "ML Model":
         import joblib
         from pathlib import Path
         @st.cache_resource
-        def load_model():
+        def load_model_f():
             BASE_DIR = Path(__file__).resolve().parent
-            MODEL_PATH = BASE_DIR  / "graphsage_model_ETA.joblib"
+            MODEL_PATH = BASE_DIR  / "ftl_model.joblib"
             return joblib.load(MODEL_PATH)
+        @st.cache_resource
+        def load_model_c():
+                    BASE_DIR = Path(__file__).resolve().parent
+                    MODEL_PATH = BASE_DIR  / "cart_model.joblib"
+                    return joblib.load(MODEL_PATH)
 
         st.subheader("Baseline (Random Forest) vs. GraphSAGE")
-        test_src, test_dst, tab_test,X_train_base, y_train,X_test_base,y_test,graph =graph_data(df)
-        model= load_model()
+        test_src_f, test_dst_f, tab_test_f,X_train_base_f, y_train_f,X_test_base_f,y_test_f,graph_f =graph_data(ftl_df)
+        test_src_c, test_dst_c, tab_test_c,X_train_base_c, y_train_c,X_test_base_c,y_test_c,graph_c =graph_data(cart_df)
+        model_f= load_model_f()
+        model_c= load_model_c()
         with torch.no_grad():
-             pred_graph = model(graph.x, graph.edge_index, test_src, test_dst, tab_test).cpu().numpy()
+             pred_graph_f = model_f(graph_f.x, graph_f.edge_index, test_src_f, test_dst_f, tab_test_f).cpu().numpy()
+             pred_graph_c = model_c(graph_c.x, graph_c.edge_index, test_src_c, test_dst_c, tab_test_c).cpu().numpy()
+        rf_base_c = RandomForestRegressor(n_estimators=100,random_state=42, n_jobs=-1)
+        rf_base_c.fit(X_train_base_c, y_train_c)
+        y_pred_base_c = rf_base_c.predict(X_test_base_c)
 
-        rf_base = RandomForestRegressor(n_estimators=100,random_state=42, n_jobs=-1)
-        rf_base.fit(X_train_base, y_train)
-        y_pred_base = rf_base.predict(X_test_base)
+        rf_base_f = RandomForestRegressor(n_estimators=100,random_state=42, n_jobs=-1)
+        rf_base_f.fit(X_train_base_f, y_train_f)
+        y_pred_base_f = rf_base_f.predict(X_test_base_f)
 
-        test_results = test_df.copy()
-        test_results["graph_prediction"] = pred_graph
-        test_results["rf_prediction"] = y_pred_base
-        
-        base_mae = mean_absolute_error(y_test, y_pred_base)
-        graph_mae = mean_absolute_error(y_test, pred_graph)
-        base_acc = within_15_pct_accuracy(y_test, y_pred_base)
-        graph_acc = within_15_pct_accuracy(y_test, pred_graph)
+        cart_results = cart_df[cart_df["data"] == "test"].copy()
+        cart_results["graph_prediction"] = pred_graph_c
+        #cart_results["rf_prediction"] = y_pred_base_c
+
+        ftl_results = ftl_df[ftl_df["data"] == "test"].copy()
+        ftl_results["graph_prediction"] = pred_graph_f
+        #ftl_results["rf_prediction"] = y_pred_base_f
+
+        base_mae = mean_absolute_error(y_test_c, y_pred_base_c)
+        graph_mae = mean_absolute_error(y_test_c, pred_graph_c)
+        base_acc = within_15_pct_accuracy(y_test_c, y_pred_base_c)
+        graph_acc = within_15_pct_accuracy(y_test_c, pred_graph_c)
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Baseline MAE (min)", f"{base_mae:.2f}")
-        col2.metric("GraphSAGE MAE (min)", f"{graph_mae:.2f}")
+        col1.metric("Baseline MAE (min) for Carting Routes", f"{base_mae:.2f}")
+        col2.metric("GraphSAGE MAE (min) for Carting Routes", f"{graph_mae:.2f}")
         col3.metric("Baseline within-15% accuracy", f"{base_acc:.1f}%")
         col4.metric("GraphSAGE within-15% accuracy", f"{graph_acc:.1f}%")
 
+        base_mae = mean_absolute_error(y_test_c, y_pred_base_c)
+        graph_mae = mean_absolute_error(y_test_c, pred_graph_c)
+        base_acc = within_15_pct_accuracy(y_test_c, y_pred_base_c)
+        graph_acc = within_15_pct_accuracy(y_test_c, pred_graph_c)
+        col5, col6, col7, col8 = st.columns(4)
+        col5.metric("Baseline MAE (min) for Carting Routes", f"{base_mae:.2f}")
+        col6.metric("GraphSAGE MAE (min) for Carting Routes", f"{graph_mae:.2f}")
+        col7.metric("Baseline within-15% accuracy", f"{base_acc:.1f}%")
+        col8.metric("GraphSAGE within-15% accuracy", f"{graph_acc:.1f}%")
         st.plotly_chart(
             plot_model_comparison_bar(
                 base_mae, graph_mae, base_acc,graph_acc),
-            use_container_width=True,
-        )
+            use_container_width=True,)
 
         col5, col6 = st.columns(2)
         with col5:
             st.plotly_chart(
-                plot_pred_vs_actual(y_test, pred_graph, "GraphSAGE: Predicted vs. Actual"),
+                plot_pred_vs_actual(y_test_c, pred_graph_c, "GraphSAGE: Predicted vs. Actual for Carting Routes"),
                 use_container_width=True,
             )
         with col6:
             st.plotly_chart(
-                plot_error_histogram(y_test, pred_graph, "GraphSAGE Prediction Error"),
+                plot_error_histogram(y_test_c, pred_graph_c, "GraphSAGE Prediction Error for Carting Routes"),
                 use_container_width=True,
             )
+        col7, col8 = st.columns(2)
+        with col7:
+                    st.plotly_chart(
+                        plot_pred_vs_actual(y_test_f, pred_graph_f, "GraphSAGE: Predicted vs. Actual for FTL Routes"),
+                        use_container_width=True,
+                    )
+        with col8:
+                    st.plotly_chart(
+                        plot_error_histogram(y_test_f, pred_graph_f, "GraphSAGE Prediction Error for FTL Routes"),
+                        use_container_width=True,
+                    )
 elif page == "Decision Framework":
+    import torch
     import joblib
     from pathlib import Path
     @st.cache_resource
-    def load_model():
-                BASE_DIR = Path(__file__).resolve().parent
-                MODEL_PATH = BASE_DIR  / "graphsage_model_ETA.joblib"
-                return joblib.load(MODEL_PATH)
-    
-           # st.subheader("Baseline (Random Forest) vs. GraphSAGE")
-    test_src, test_dst, tab_test,X_train_base, y_train,X_test_base,y_test,graph =graph_data(df)
-    model= load_model()
+    def load_model_f():
+            BASE_DIR = Path(__file__).resolve().parent
+            MODEL_PATH = BASE_DIR  / "ftl_model.joblib"
+            return joblib.load(MODEL_PATH)
+    @st.cache_resource
+    def load_model_c():
+                    BASE_DIR = Path(__file__).resolve().parent
+                    MODEL_PATH = BASE_DIR  / "cart_model.joblib"
+                    return joblib.load(MODEL_PATH)
+
+    test_src_f, test_dst_f, tab_test_f,X_train_base_f, y_train_f,X_test_base_f,y_test_f,graph_f =graph_data(ftl_df)
+    test_src_c, test_dst_c, tab_test_c,X_train_base_c, y_train_c,X_test_base_c,y_test_c,graph_c =graph_data(cart_df)
+    model_f= load_model_f()
+    model_c= load_model_c()
     with torch.no_grad():
-                 pred_graph = model(graph.x, graph.edge_index, test_src, test_dst, tab_test).cpu().numpy()
+             pred_graph_f = model_f(graph_f.x, graph_f.edge_index, test_src_f, test_dst_f, tab_test_f).cpu().numpy()
+             pred_graph_c = model_c(graph_c.x, graph_c.edge_index, test_src_c, test_dst_c, tab_test_c).cpu().numpy()
+
+
+    cart_results = cart_df[cart_df["data"] == "test"].copy()
+    cart_results["graph_prediction"] = pred_graph_c
     
-    rf_base = RandomForestRegressor(n_estimators=100,random_state=42, n_jobs=-1)
-    rf_base.fit(X_train_base, y_train)
-    y_pred_base = rf_base.predict(X_test_base)
+    ftl_results = ftl_df[ftl_df["data"] == "test"].copy()
+    ftl_results["graph_prediction"] = pred_graph_f
     
-    test_results = test_df.copy()
-    test_results["graph_prediction"] = pred_graph
-    test_results["rf_prediction"] = y_pred_base
     st.subheader("FTL vs. Carting Route Decision")
     st.caption(
         "Enter a shipment's parameters to get a cost/risk-based route recommendation, "
@@ -226,7 +268,7 @@ elif page == "Decision Framework":
             time_of_day = st.selectbox("Time of day", list(time_labels.keys()), format_func=lambda k: time_labels[k])
         with c2:
             #distance_km = st.number_input("Distance (km)", min_value=1.0, value=100.0, step=10.0)
-            distance_km = corridor_df.groupby(["source_center", "destination_center"])["osrm_distance"].median()
+            distance_km = corridor_df[(corridor_df["source_center"]==source_center) & (corridor_df["destination_center"]==destination_center)]["osrm_distance"].median()
             volume = st.number_input("Shipment volume (packages)", min_value=1.0, value=200.0, step=10.0)
             sla_deadline_hours = st.number_input("SLA deadline (hours)", min_value=0.5, value=10.0, step=0.5)
         submitted = st.form_submit_button("Get Recommendation")
@@ -237,8 +279,8 @@ elif page == "Decision Framework":
      decision = framework.evaluate_tradeoff(
     distance_km=distance_km,
     current_volume=volume,
-    pred_eta_ftl=12.0,       
-    pred_eta_carting=8.0,    
+    pred_eta_ftl=ftl_results[(ftl_results["source_center"]==source_center )&(ftl_results["destination_center"]==destination_center)]["graph_prediction"].median(),  # Using median prediction for FTL
+    pred_eta_carting=cart_results[(cart_results["source_center"]==source_center) & (cart_results["destination_center"]==destination_center)]["graph_prediction"].median(),  # Using median prediction for Carting
     sla_deadline=sla_deadline_hours,
     source_center=source_center , # High network risk
     destination_center=destination_center,
