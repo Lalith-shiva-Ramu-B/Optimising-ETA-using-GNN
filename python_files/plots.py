@@ -175,13 +175,13 @@ def plot_time_of_day_breaches(breached_df: pd.DataFrame):
     return fig
 
 # ML model evaluation
-def plot_model_comparison_bar(base_mae: float, graph_mae: float, base_acc: float, graph_acc: float):
+def plot_model_comparison_bar(base_mae: float, graph_mae: float, base_acc: float, graph_acc: float,title):
     fig = go.Figure()
     fig.add_trace(go.Bar(name="Random Forest (baseline)", x=["MAE (mins)", "Within-15% Accuracy (%)"],
                           y=[base_mae, base_acc]))
     fig.add_trace(go.Bar(name="GraphSAGE", x=["MAE (mins)", "Within-15% Accuracy (%)"],
                           y=[graph_mae, graph_acc]))
-    fig.update_layout(barmode="group", height=400, title="Baseline vs. GraphSAGE",
+    fig.update_layout(barmode="group", height=400, title=title,
                        margin=dict(l=10, r=10, t=40, b=10))
     return fig
 

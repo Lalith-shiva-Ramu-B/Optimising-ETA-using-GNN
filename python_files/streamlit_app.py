@@ -177,37 +177,46 @@ elif page == "ML Model":
         graph_mae = mean_absolute_error(y_test_c, pred_graph_c)
         base_acc = within_15_pct_accuracy(y_test_c, y_pred_base_c)
         graph_acc = within_15_pct_accuracy(y_test_c, pred_graph_c)
+        st.subheader("Carting route")
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Baseline MAE (min) for Carting Routes", f"{base_mae:.2f}")
         col2.metric("GraphSAGE MAE (min) for Carting Routes", f"{graph_mae:.2f}")
         col3.metric("Baseline within-15% accuracy", f"{base_acc:.1f}%")
         col4.metric("GraphSAGE within-15% accuracy", f"{graph_acc:.1f}%")
+        
+        st.plotly_chart(
+                    plot_model_comparison_bar(
+                        base_mae, graph_mae, base_acc,graph_acc,"Baseline vs. GraphSAGE Carting" ),
+                    use_container_width=True)
 
-        base_mae = mean_absolute_error(y_test_c, y_pred_base_c)
-        graph_mae = mean_absolute_error(y_test_c, pred_graph_c)
-        base_acc = within_15_pct_accuracy(y_test_c, y_pred_base_c)
-        graph_acc = within_15_pct_accuracy(y_test_c, pred_graph_c)
+        col1, col2 = st.columns(2)
+        with col1:
+                    st.plotly_chart(
+                        plot_pred_vs_actual(y_test_c, pred_graph_c, "GraphSAGE: Predicted vs. Actual for Carting Routes"),
+                        use_container_width=True,
+                    )
+        with col2:
+                    st.plotly_chart(
+                        plot_error_histogram(y_test_c, pred_graph_c, "GraphSAGE Prediction Error for Carting Routes"),
+                        use_container_width=True,
+                    )
+        base_mae_f = mean_absolute_error(y_test_f, y_pred_base_f)
+        graph_mae_f = mean_absolute_error(y_test_f, pred_graph_f)
+        base_acc_f = within_15_pct_accuracy(y_test_f, y_pred_base_f)
+        graph_acc_f = within_15_pct_accuracy(y_test_f, pred_graph_f)
+        st.subheader("FTL route")
         col5, col6, col7, col8 = st.columns(4)
-        col5.metric("Baseline MAE (min) for Carting Routes", f"{base_mae:.2f}")
-        col6.metric("GraphSAGE MAE (min) for Carting Routes", f"{graph_mae:.2f}")
-        col7.metric("Baseline within-15% accuracy", f"{base_acc:.1f}%")
-        col8.metric("GraphSAGE within-15% accuracy", f"{graph_acc:.1f}%")
+        col5.metric("Baseline MAE (min) for Carting Routes", f"{base_mae_f:.2f}")
+        col6.metric("GraphSAGE MAE (min) for Carting Routes", f"{graph_mae_f:.2f}")
+        col7.metric("Baseline within-15% accuracy", f"{base_acc_f:.1f}%")
+        col8.metric("GraphSAGE within-15% accuracy", f"{graph_acc_f:.1f}%")
+        
         st.plotly_chart(
             plot_model_comparison_bar(
-                base_mae, graph_mae, base_acc,graph_acc),
+                base_mae_f, graph_mae_f, base_acc_f,graph_acc_f,"Baseline vs. GraphSAGE FTL"),
             use_container_width=True,)
 
-        col5, col6 = st.columns(2)
-        with col5:
-            st.plotly_chart(
-                plot_pred_vs_actual(y_test_c, pred_graph_c, "GraphSAGE: Predicted vs. Actual for Carting Routes"),
-                use_container_width=True,
-            )
-        with col6:
-            st.plotly_chart(
-                plot_error_histogram(y_test_c, pred_graph_c, "GraphSAGE Prediction Error for Carting Routes"),
-                use_container_width=True,
-            )
+        
         col7, col8 = st.columns(2)
         with col7:
                     st.plotly_chart(
