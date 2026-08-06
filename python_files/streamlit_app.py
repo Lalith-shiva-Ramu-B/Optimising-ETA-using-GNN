@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from datetime import datetime
-from main import (corridor_setup,critical_hub_find,breached_find,time_bucket,
+from main import (corridor_setup,critical_hub_find,breached_find,time_bucket,test_df,
                   build_graph,graph_data,within_15_pct_accuracy,GraphSAGE,RouteDecisionFramework)
 from plots import (
     kpi_indicator,
@@ -32,6 +32,8 @@ df=load_data(upload_file)
 df['od_start_time'] = pd.to_datetime( df['od_start_time'], format='%d-%m-%Y %H:%M',errors='coerce')
 df['hour'] = df['od_start_time'].dt.hour 
 df['time_of_day'] =df['hour'].apply(time_bucket)
+ftl_df = df[df["route_type"] == "FTL"].copy()
+cart_df = df[df["route_type"] == "Carting"].copy()
 page = st.sidebar.radio(
     "Dashboard section",
     (
@@ -132,7 +134,6 @@ elif page == "Bottleneck Analysis":
 
 elif page == "ML Model":
         import torch
-        import torch.nn as nn
         from sklearn.ensemble import RandomForestRegressor
         from sklearn.metrics import mean_absolute_error
         import joblib
@@ -141,10 +142,6 @@ elif page == "ML Model":
         def load_model():
             BASE_DIR = Path(__file__).resolve().parent
             MODEL_PATH = BASE_DIR  / "graphsage_model_ETA.joblib"
-
-            #st.write("Model path:", MODEL_PATH)
-            #st.write("Model exists:", MODEL_PATH.exists())
-
             return joblib.load(MODEL_PATH)
 
         st.subheader("Baseline (Random Forest) vs. GraphSAGE")
@@ -156,6 +153,11 @@ elif page == "ML Model":
         rf_base = RandomForestRegressor(n_estimators=100,random_state=42, n_jobs=-1)
         rf_base.fit(X_train_base, y_train)
         y_pred_base = rf_base.predict(X_test_base)
+
+        test_results = test_df.copy()
+        test_results["graph_prediction"] = pred_graph
+        test_results["rf_prediction"] = y_pred_base
+        
         base_mae = mean_absolute_error(y_test, y_pred_base)
         graph_mae = mean_absolute_error(y_test, pred_graph)
         base_acc = within_15_pct_accuracy(y_test, y_pred_base)
@@ -184,6 +186,27 @@ elif page == "ML Model":
                 use_container_width=True,
             )
 elif page == "Decision Framework":
+    import joblib
+    from pathlib import Path
+    @st.cache_resource
+    def load_model():
+                BASE_DIR = Path(__file__).resolve().parent
+                MODEL_PATH = BASE_DIR  / "graphsage_model_ETA.joblib"
+                return joblib.load(MODEL_PATH)
+    
+           # st.subheader("Baseline (Random Forest) vs. GraphSAGE")
+    test_src, test_dst, tab_test,X_train_base, y_train,X_test_base,y_test,graph =graph_data(df)
+    model= load_model()
+    with torch.no_grad():
+                 pred_graph = model(graph.x, graph.edge_index, test_src, test_dst, tab_test).cpu().numpy()
+    
+    rf_base = RandomForestRegressor(n_estimators=100,random_state=42, n_jobs=-1)
+    rf_base.fit(X_train_base, y_train)
+    y_pred_base = rf_base.predict(X_test_base)
+    
+    test_results = test_df.copy()
+    test_results["graph_prediction"] = pred_graph
+    test_results["rf_prediction"] = y_pred_base
     st.subheader("FTL vs. Carting Route Decision")
     st.caption(
         "Enter a shipment's parameters to get a cost/risk-based route recommendation, "
@@ -197,10 +220,13 @@ elif page == "Decision Framework":
         c1, c2 = st.columns(2)
         with c1:
             source_center = st.selectbox("Source hub", facilities)
+            st.write(df[df["source_center"]==source_center]['source_name'].unique()[0])
             destination_center = st.selectbox("Destination hub", facilities, index=min(1, len(facilities) - 1))
+            st.write(df[df["destination_center"]==destination_center]['destination_name'].unique()[0])
             time_of_day = st.selectbox("Time of day", list(time_labels.keys()), format_func=lambda k: time_labels[k])
         with c2:
-            distance_km = st.number_input("Distance (km)", min_value=1.0, value=100.0, step=10.0)
+            #distance_km = st.number_input("Distance (km)", min_value=1.0, value=100.0, step=10.0)
+            distance_km = corridor_df.groupby(["source_center", "destination_center"])["osrm_distance"].median()
             volume = st.number_input("Shipment volume (packages)", min_value=1.0, value=200.0, step=10.0)
             sla_deadline_hours = st.number_input("SLA deadline (hours)", min_value=0.5, value=10.0, step=0.5)
         submitted = st.form_submit_button("Get Recommendation")
