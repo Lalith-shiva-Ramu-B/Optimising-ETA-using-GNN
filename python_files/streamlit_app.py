@@ -193,8 +193,8 @@ elif page == "ML Model":
         tab_carting, tab_ftl = st.tabs(["🛒 Carting Routes", "🚚 FTL Routes"])
         with tab_carting:
                 col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Baseline MAE (min) for Carting Routes", f"{base_mae:.2f}")
-                col2.metric("GraphSAGE MAE (min) for Carting Routes", f"{graph_mae:.2f}")
+                col1.metric("Baseline MAE ", f"{base_mae:.2f}")
+                col2.metric("GraphSAGE MAE ", f"{graph_mae:.2f}")
                 col3.metric("Baseline within-15% accuracy", f"{base_acc:.1f}%")
                 col4.metric("GraphSAGE within-15% accuracy", f"{graph_acc:.1f}%")
                 
@@ -220,8 +220,8 @@ elif page == "ML Model":
                 graph_acc_f = within_15_pct_accuracy(y_test_f, pred_graph_f)
         with tab_ftl:
                 col5, col6, col7, col8 = st.columns(4)
-                col5.metric("Baseline MAE (min) for Carting Routes", f"{base_mae_f:.2f}")
-                col6.metric("GraphSAGE MAE (min) for Carting Routes", f"{graph_mae_f:.2f}")
+                col5.metric("Baseline MAE ", f"{base_mae_f:.2f}")
+                col6.metric("GraphSAGE MAE ", f"{graph_mae_f:.2f}")
                 col7.metric("Baseline within-15% accuracy", f"{base_acc_f:.1f}%")
                 col8.metric("GraphSAGE within-15% accuracy", f"{graph_acc_f:.1f}%")
                 
