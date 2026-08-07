@@ -1,3 +1,5 @@
+from xml.parsers.expat import model
+
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -51,11 +53,32 @@ page = st.sidebar.radio(
     ),
 )
 with st.expander("Data preview"):
-    #df.drop(columns=["route_schedule_uuid","cutoff_timestamp"],inplace=True)
     st.dataframe(df)
-corridor_df=corridor_setup(df)
-breached_df=breached_find(corridor_df)
-critical_hubs, hub_metrics_df=critical_hub_find(corridor_df)
+
+@st.cache_data
+def load_data(path):
+    data = pd.read_csv(path)
+    return data
+
+# --- add these here, all in one place ---
+@st.cache_data(show_spinner="Building corridor graph...")
+def cached_corridor_setup(df: pd.DataFrame) -> pd.DataFrame:
+    return corridor_setup(df)
+
+@st.cache_data(show_spinner="Finding breached corridors...")
+def cached_breached_find(corridor_df: pd.DataFrame) -> pd.DataFrame:
+    return breached_find(corridor_df)
+
+@st.cache_data(show_spinner="Computing hub centrality metrics...")
+def cached_critical_hub_find(corridor_df: pd.DataFrame):
+    return critical_hub_find(corridor_df)
+
+@st.cache_data(show_spinner="Building network graph...")
+def cached_build_graph(corridor_df: pd.DataFrame):
+    return build_graph(corridor_df)
+corridor_df=cached_corridor_setup(df)
+breached_df=cached_breached_find(corridor_df)
+critical_hubs, hub_metrics_df=cached_critical_hub_find(corridor_df)
 
 if page == "Executive Dashboard":
         st.subheader("Key Performance Indicators")
@@ -76,7 +99,7 @@ if page == "Executive Dashboard":
 elif page == "Network Analysis":
     st.subheader("Interactive Corridor Network")
     st.caption("Visual representation of routing paths and bottlenecks.")
-    graph = build_graph(corridor_df)
+    graph = cached_build_graph(corridor_df)
     breached_edges = set(zip(breached_df["source_center"], breached_df["destination_center"]))
     fig = plot_network(graph, breached_edges=breached_edges, bottleneck_nodes=critical_hubs)
     st.plotly_chart(fig, use_container_width=True)
@@ -151,22 +174,17 @@ elif page == "ML Model":
         import joblib
         from pathlib import Path
         @st.cache_resource
-        def load_model_f():
+        def load_model():
             BASE_DIR = Path(__file__).resolve().parent
-            MODEL_PATH = BASE_DIR  / "ftl_model.joblib"
-            return joblib.load(MODEL_PATH)
-        @st.cache_resource
-        def load_model_c():
-                    BASE_DIR = Path(__file__).resolve().parent
-                    MODEL_PATH = BASE_DIR  / "cart_model.joblib"
-                    return joblib.load(MODEL_PATH)
+            MODEL_PATH_f = BASE_DIR  / "ftl_model.joblib"
+            MODEL_PATH_c = BASE_DIR  / "cart_model.joblib"
+            return joblib.load(MODEL_PATH_f),joblib.load(MODEL_PATH_c)
 
         st.subheader("Baseline (Random Forest) vs. GraphSAGE")
         with st.spinner("Generating predictions and calculating metrics..."):
                 test_src_f, test_dst_f, tab_test_f,X_train_base_f, y_train_f,X_test_base_f,y_test_f,graph_f =graph_data(ftl_df)
                 test_src_c, test_dst_c, tab_test_c,X_train_base_c, y_train_c,X_test_base_c,y_test_c,graph_c =graph_data(cart_df)
-                model_f= load_model_f()
-                model_c= load_model_c()
+                model_f,model_c= load_model()
                 with torch.no_grad():
                     pred_graph_f = model_f(graph_f.x, graph_f.edge_index, test_src_f, test_dst_f, tab_test_f).cpu().numpy()
                     pred_graph_c = model_c(graph_c.x, graph_c.edge_index, test_src_c, test_dst_c, tab_test_c).cpu().numpy()
@@ -247,20 +265,15 @@ elif page == "Decision Framework":
     import joblib
     from pathlib import Path
     @st.cache_resource
-    def load_model_f():
+    def load_model():
             BASE_DIR = Path(__file__).resolve().parent
-            MODEL_PATH = BASE_DIR  / "ftl_model.joblib"
-            return joblib.load(MODEL_PATH)
-    @st.cache_resource
-    def load_model_c():
-                    BASE_DIR = Path(__file__).resolve().parent
-                    MODEL_PATH = BASE_DIR  / "cart_model.joblib"
-                    return joblib.load(MODEL_PATH)
+            MODEL_PATH_f = BASE_DIR  / "ftl_model.joblib"
+            MODEL_PATH_c = BASE_DIR  / "cart_model.joblib"
+            return joblib.load(MODEL_PATH_f),joblib.load(MODEL_PATH_c)
 
-    test_src_f, test_dst_f, tab_test_f,X_train_base_f, y_train_f,X_test_base_f,y_test_f,graph_f =graph_data(ftl_df)
-    test_src_c, test_dst_c, tab_test_c,X_train_base_c, y_train_c,X_test_base_c,y_test_c,graph_c =graph_data(cart_df)
-    model_f= load_model_f()
-    model_c= load_model_c()
+    test_src_f, test_dst_f, tab_test_f,X_train_base_f, y_train_f,X_test_base_f,y_test_f,graph_f,node_mapping_f,scaler_f =graph_data(ftl_df)
+    test_src_c, test_dst_c, tab_test_c,X_train_base_c, y_train_c,X_test_base_c,y_test_c,graph_c,node_mapping_c,scaler_c =graph_data(cart_df)
+    model_f, model_c= load_model()
     with torch.no_grad():
              pred_graph_f = model_f(graph_f.x, graph_f.edge_index, test_src_f, test_dst_f, tab_test_f).cpu().numpy()
              pred_graph_c = model_c(graph_c.x, graph_c.edge_index, test_src_c, test_dst_c, tab_test_c).cpu().numpy()
@@ -282,6 +295,41 @@ elif page == "Decision Framework":
     route_types = list(corridor_df["route_type"].unique())
     time_labels = {0: "Night", 1: "Morning", 2: "Afternoon", 3: "Evening"}
 
+    def predict_dynamic_eta(model, graph, df, src_name, dst_name, node_mapping, scaler):
+        
+                    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        # 1. Safely check if nodes exist in the graph mapping
+                    if src_name not in node_mapping or dst_name not in node_mapping:
+                           return df["segment_actual_time"].median() # Fallback for completely unseen nodes
+            
+                    src_idx = node_mapping[src_name]
+                    dst_idx = node_mapping[dst_name]
+        
+        # 2. Extract base features for the selected route
+                    route_df = df[(df["source_center"] == src_name) & (df["destination_center"] == dst_name)]
+        
+                    if route_df.empty:
+                        return df["segment_actual_time"].median() # Fallback if specific route combination has no data
+            
+                    BASE_FEATURES = ["segment_osrm_time", "segment_osrm_distance", "time_of_day"]
+        
+        # 3. Transform features using the ALREADY FITTED scaler from training
+                    raw_features = route_df[BASE_FEATURES].fillna(0).median().values.reshape(1, -1)
+                    scaled_features = scaler.transform(raw_features)
+        
+        # 4. Create tensors
+                    src_tensor = torch.tensor([src_idx], dtype=torch.long, device=device)
+                    dst_tensor = torch.tensor([dst_idx], dtype=torch.long, device=device)
+                    tab_tensor = torch.tensor(scaled_features, dtype=torch.float32, device=device)
+        
+        # 5. Predict
+                    model.eval()
+                    model.to(device)
+                    with torch.no_grad():
+                        graph = graph.to(device)
+                        pred = model(graph.x, graph.edge_index, src_tensor, dst_tensor, tab_tensor)
+                        return pred.item()
     
     c1, c2 = st.columns(2)
     with c1:
@@ -305,31 +353,46 @@ elif page == "Decision Framework":
 
 
             if source_center == destination_center:
-                  st.warning("Both source center and destination center are same")
+                  st.error("Source and destination are the same — pick two different hubs.")
 
-        
-            #st.write(df[df["destination_center"]==destination_center]['destination_name'].unique()[0])
             time_of_day = st.selectbox("Time of day", list(time_labels.keys()), format_func=lambda k: time_labels[k])
     with st.form("decision_form"):
         with c2:
-            #distance_km = st.number_input("Distance (km)", min_value=1.0, value=100.0, step=10.0)
-            distance_km = corridor_df[(corridor_df["source_center"]==source_center) & (corridor_df["destination_center"]==destination_center)]["osrm_distance"].median()
+            distance_km = corridor_df[(corridor_df["source_center"]==source_center) & (corridor_df["destination_center"]==destination_center)]["actual_distance_to_destination"].median()
             volume = st.number_input("Shipment volume (packages)", min_value=1.0, value=200.0, step=10.0)
             sla_deadline_hours = st.number_input("SLA deadline (hours)", min_value=0.5, value=10.0, step=0.5)
         submitted = st.form_submit_button("Get Recommendation")
 
     risk_lookup = dict(zip(hub_metrics_df["Facility"],hub_metrics_df["SLA_Breach_Contribution"]))
     if submitted:
-     framework = RouteDecisionFramework(hub_risk_lookup=risk_lookup) 
-     decision = framework.evaluate_tradeoff(
-    distance_km=distance_km,
-    current_volume=volume,
-    pred_eta_ftl=ftl_results[(ftl_results["source_center"]==source_center )&(ftl_results["destination_center"]==destination_center)]["graph_prediction"].median(),  # Using median prediction for FTL
-    pred_eta_carting=cart_results[(cart_results["source_center"]==source_center) & (cart_results["destination_center"]==destination_center)]["graph_prediction"].median(),  # Using median prediction for Carting
-    sla_deadline=sla_deadline_hours,
-    source_center=source_center , # High network risk
-    destination_center=destination_center,
-       time_of_day=time_of_day
+
+        ftl_median = ftl_results[(ftl_results["source_center"]==source_center) & (ftl_results["destination_center"]==destination_center)]["graph_prediction"].median()
+        
+        if pd.isna(ftl_median):
+            pred_etl_ftl = predict_dynamic_eta(model_f, graph_f, ftl_df, source_center, destination_center, node_mapping_f, scaler_f)
+        else:
+            pred_etl_ftl = ftl_median
+            
+        # --- 2. Independently evaluate Carting ---
+        cart_median = cart_results[(cart_results["source_center"]==source_center) & (cart_results["destination_center"]==destination_center)]["graph_prediction"].median()
+        
+        if pd.isna(cart_median):
+            pred_etl_carting = predict_dynamic_eta(model_c, graph_c, cart_df, source_center, destination_center, node_mapping_c, scaler_c)
+        else:
+            pred_etl_carting = cart_median
+        framework = RouteDecisionFramework(hub_risk_lookup=risk_lookup) 
+        decision = framework.evaluate_tradeoff(
+        distance_km=distance_km,
+        current_volume=volume,
+        pred_eta_ftl=pred_etl_ftl,     # Using median prediction for FTL
+        pred_eta_carting=pred_etl_carting,  # Using median prediction for Carting
+        sla_deadline=sla_deadline_hours,
+        source_center=source_center , # High network risk
+        destination_center=destination_center,
+        time_of_day=time_of_day
 )
-     for key, value in decision.items():
+        for key, value in decision.items():
           st.write(f"{key}: {value}")
+
+    if submitted is False:
+        st.info("Fill in the shipment parameters and click 'Get Recommendation' to see the route decision.")

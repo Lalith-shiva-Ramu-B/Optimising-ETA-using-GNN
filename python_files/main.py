@@ -155,11 +155,6 @@ class GraphSAGE(nn.Module):
         return out    
 def graph_data(df):
     df = df.copy()
-    #unique_routes = df["route_type"].unique()
-    #route_mapping = {route: idx for idx, route in enumerate(unique_routes)}
-    #print("route mapping:", route_mapping)
-    #df["route_type_encoded"] = df["route_type"].map(route_mapping).fillna(0).astype(int)
- 
     BASE_FEATURES = ["segment_osrm_time", "segment_osrm_distance", "time_of_day"]
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -224,7 +219,7 @@ def graph_data(df):
     tab_train = torch.tensor(X_train_base, dtype=torch.float32, device=device)
     tab_test = torch.tensor(X_test_base, dtype=torch.float32, device=device)
 
-    return  test_src, test_dst, tab_test,X_train_base, y_train,X_test_base,y_test,graph
+    return  test_src, test_dst, tab_test,X_train_base, y_train,X_test_base,y_test,graph,node_mapping,scaler
 
 def within_15_pct_accuracy(y_true, y_pred):
     # Prevent division by zero
