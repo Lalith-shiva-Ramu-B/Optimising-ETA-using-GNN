@@ -15,9 +15,11 @@ from plots import (
     plot_route_type_comparison,
     plot_time_of_day_comparison,plot_route_type_breaches,plot_time_of_day_breaches
 )
-st.set_page_config(page_title='ETA model Dashboard',layout='wide')
+st.set_page_config(page_title='ETA Analytics Dashboard', page_icon="🚚", layout='wide')
 
-st.title("ETA Dashboard")
+st.title("🚚 ETA Analytics & Routing Dashboard")
+st.markdown("Monitor network performance, identify bottlenecks, and optimize logistics routing.")
+st.divider()
 @st.cache_data
 def load_data(path):
     data= pd.read_csv(path)
@@ -28,12 +30,14 @@ if upload_file is None:
     st.info("upload a file in sidebar")
     st.stop()
 
-df=load_data(upload_file)
-df['od_start_time'] = pd.to_datetime( df['od_start_time'], format='%d-%m-%Y %H:%M',errors='coerce')
-df['hour'] = df['od_start_time'].dt.hour 
-df['time_of_day'] =df['hour'].apply(time_bucket)
-ftl_df = df[df["route_type"] == "FTL"].copy()
-cart_df = df[df["route_type"] == "Carting"].copy()
+with st.spinner("Processing data..."):
+    df=load_data(upload_file)
+    df.drop(columns=["route_schedule_uuid","cutoff_timestamp","trip_uuid","cutoff_timestamp"])
+    df['od_start_time'] = pd.to_datetime( df['od_start_time'], format='%d-%m-%Y %H:%M',errors='coerce')
+    df['hour'] = df['od_start_time'].dt.hour 
+    df['time_of_day'] =df['hour'].apply(time_bucket)
+    ftl_df = df[df["route_type"] == "FTL"].copy()
+    cart_df = df[df["route_type"] == "Carting"].copy()
 page = st.sidebar.radio(
     "Dashboard section",
     (
@@ -46,6 +50,7 @@ page = st.sidebar.radio(
     ),
 )
 with st.expander("Data preview"):
+    df.drop(columns=["route_schedule_uuid","cutoff_timestamp","trip_uuid","cutoff_timestamp"])
     st.dataframe(df)
 corridor_df=corridor_setup(df)
 breached_df=breached_find(corridor_df)
@@ -69,52 +74,58 @@ if page == "Executive Dashboard":
 
 elif page == "Network Analysis":
     st.subheader("Interactive Corridor Network")
+    st.caption("Visual representation of routing paths and bottlenecks.")
     graph = build_graph(corridor_df)
     breached_edges = set(zip(breached_df["source_center"], breached_df["destination_center"]))
     fig = plot_network(graph, breached_edges=breached_edges, bottleneck_nodes=critical_hubs)
     st.plotly_chart(fig, use_container_width=True)
-
+    st.divider()
     st.subheader("Hub Metrics")
     st.caption(f"Identified {len(critical_hubs)} structurally critical (bottleneck) hubs.")
     st.dataframe(hub_metrics_df.sort_values(by="Betweenness", ascending=False), use_container_width=True)
 
 elif page == "Corridor Analysis":
-    st.subheader("Top Delayed Corridors")
-    top_delayed = corridor_df.sort_values(by="median_delay_ratio", ascending=False).head(15)
-    st.dataframe(top_delayed, use_container_width=True)
+    tab1, tab2, tab3 = st.tabs(["🚦 Top Delays & Breaches", "📊 Distribution Charts", "🔍 Search Corridors"])
+    
+    with tab1:
+          colA, colB = st.columns(2)
+          with colA:
+            st.subheader("Top Delayed Corridors")
+            top_delayed = corridor_df.sort_values(by="median_delay_ratio", ascending=False).head(15)
+            st.dataframe(top_delayed, use_container_width=True,)
+          with colB:
+                st.subheader("Top Breached Corridors")
+                st.dataframe(breached_df.head(15), use_container_width=True)
+    with tab2:
+            col1,col2,col3 = st.columns(3)
+            with col1:
+                st.plotly_chart(plot_delay_ratio_distribution(corridor_df), use_container_width=True)
+            with col2:
+                st.plotly_chart(plot_route_type_comparison(corridor_df), use_container_width=True)
+            with col3:
+                st.plotly_chart(plot_route_type_breaches(breached_df), use_container_width=True)
 
-    st.subheader("Top Breached Corridors")
-    st.dataframe(breached_df.head(15), use_container_width=True)
 
-    col1,col2,col3 = st.columns(3)
-    with col1:
-        st.plotly_chart(plot_delay_ratio_distribution(corridor_df), use_container_width=True)
-    with col2:
-        st.plotly_chart(plot_route_type_comparison(corridor_df), use_container_width=True)
-    with col3:
-        st.plotly_chart(plot_route_type_breaches(breached_df), use_container_width=True)
+            st.plotly_chart(plot_time_of_day_breaches(breached_df), use_container_width=True)
 
-
-    st.plotly_chart(plot_time_of_day_breaches(breached_df), use_container_width=True)
-
-    st.plotly_chart(plot_time_of_day_comparison(corridor_df), use_container_width=True)
-
-    st.subheader("Search Corridors")
-    search_term = st.text_input("Filter by source or destination facility code")
-    filtered = corridor_df
-    if search_term:
-        mask = (
-            corridor_df["source_center"].str.contains(search_term, case=False, na=False)
-            | corridor_df["destination_center"].str.contains(search_term, case=False, na=False)
-        )
-        filtered = corridor_df[mask]
-    st.dataframe(filtered, use_container_width=True)
-    st.download_button(
-        "Download filtered corridors as CSV",
-        data=filtered.to_csv(index=False).encode("utf-8"),
-        file_name="filtered_corridors.csv",
-        mime="text/csv",
-    )
+            st.plotly_chart(plot_time_of_day_comparison(corridor_df), use_container_width=True)
+    with tab3:
+            st.subheader("Search Corridors")
+            search_term = st.text_input("Filter by source or destination facility code")
+            filtered = corridor_df
+            if search_term:
+                mask = (
+                    corridor_df["source_center"].str.contains(search_term, case=False, na=False)
+                    | corridor_df["destination_center"].str.contains(search_term, case=False, na=False)
+                )
+                filtered = corridor_df[mask]
+            st.dataframe(filtered, use_container_width=True)
+            st.download_button(
+                "Download filtered corridors as CSV",
+                data=filtered.to_csv(index=False).encode("utf-8"),
+                file_name="filtered_corridors.csv",
+                mime="text/csv",
+            )
 elif page == "Bottleneck Analysis":
     st.subheader("Top Bottleneck Hubs")
     st.dataframe(
@@ -150,84 +161,86 @@ elif page == "ML Model":
                     return joblib.load(MODEL_PATH)
 
         st.subheader("Baseline (Random Forest) vs. GraphSAGE")
-        test_src_f, test_dst_f, tab_test_f,X_train_base_f, y_train_f,X_test_base_f,y_test_f,graph_f =graph_data(ftl_df)
-        test_src_c, test_dst_c, tab_test_c,X_train_base_c, y_train_c,X_test_base_c,y_test_c,graph_c =graph_data(cart_df)
-        model_f= load_model_f()
-        model_c= load_model_c()
-        with torch.no_grad():
-             pred_graph_f = model_f(graph_f.x, graph_f.edge_index, test_src_f, test_dst_f, tab_test_f).cpu().numpy()
-             pred_graph_c = model_c(graph_c.x, graph_c.edge_index, test_src_c, test_dst_c, tab_test_c).cpu().numpy()
-        rf_base_c = RandomForestRegressor(n_estimators=100,random_state=42, n_jobs=-1)
-        rf_base_c.fit(X_train_base_c, y_train_c)
-        y_pred_base_c = rf_base_c.predict(X_test_base_c)
+        with st.spinner("Generating predictions and calculating metrics..."):
+                test_src_f, test_dst_f, tab_test_f,X_train_base_f, y_train_f,X_test_base_f,y_test_f,graph_f =graph_data(ftl_df)
+                test_src_c, test_dst_c, tab_test_c,X_train_base_c, y_train_c,X_test_base_c,y_test_c,graph_c =graph_data(cart_df)
+                model_f= load_model_f()
+                model_c= load_model_c()
+                with torch.no_grad():
+                    pred_graph_f = model_f(graph_f.x, graph_f.edge_index, test_src_f, test_dst_f, tab_test_f).cpu().numpy()
+                    pred_graph_c = model_c(graph_c.x, graph_c.edge_index, test_src_c, test_dst_c, tab_test_c).cpu().numpy()
+                rf_base_c = RandomForestRegressor(n_estimators=100,random_state=42, n_jobs=-1)
+                rf_base_c.fit(X_train_base_c, y_train_c)
+                y_pred_base_c = rf_base_c.predict(X_test_base_c)
 
-        rf_base_f = RandomForestRegressor(n_estimators=100,random_state=42, n_jobs=-1)
-        rf_base_f.fit(X_train_base_f, y_train_f)
-        y_pred_base_f = rf_base_f.predict(X_test_base_f)
+                rf_base_f = RandomForestRegressor(n_estimators=100,random_state=42, n_jobs=-1)
+                rf_base_f.fit(X_train_base_f, y_train_f)
+                y_pred_base_f = rf_base_f.predict(X_test_base_f)
 
-        cart_results = cart_df[cart_df["data"] == "test"].copy()
-        cart_results["graph_prediction"] = pred_graph_c
-        #cart_results["rf_prediction"] = y_pred_base_c
+                cart_results = cart_df[cart_df["data"] == "test"].copy()
+                cart_results["graph_prediction"] = pred_graph_c
+                #cart_results["rf_prediction"] = y_pred_base_c
 
-        ftl_results = ftl_df[ftl_df["data"] == "test"].copy()
-        ftl_results["graph_prediction"] = pred_graph_f
-        #ftl_results["rf_prediction"] = y_pred_base_f
+                ftl_results = ftl_df[ftl_df["data"] == "test"].copy()
+                ftl_results["graph_prediction"] = pred_graph_f
+                #ftl_results["rf_prediction"] = y_pred_base_f
 
-        base_mae = mean_absolute_error(y_test_c, y_pred_base_c)
-        graph_mae = mean_absolute_error(y_test_c, pred_graph_c)
-        base_acc = within_15_pct_accuracy(y_test_c, y_pred_base_c)
-        graph_acc = within_15_pct_accuracy(y_test_c, pred_graph_c)
-        st.subheader("Carting route")
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Baseline MAE (min) for Carting Routes", f"{base_mae:.2f}")
-        col2.metric("GraphSAGE MAE (min) for Carting Routes", f"{graph_mae:.2f}")
-        col3.metric("Baseline within-15% accuracy", f"{base_acc:.1f}%")
-        col4.metric("GraphSAGE within-15% accuracy", f"{graph_acc:.1f}%")
-        
-        st.plotly_chart(
+                base_mae = mean_absolute_error(y_test_c, y_pred_base_c)
+                graph_mae = mean_absolute_error(y_test_c, pred_graph_c)
+                base_acc = within_15_pct_accuracy(y_test_c, y_pred_base_c)
+                graph_acc = within_15_pct_accuracy(y_test_c, pred_graph_c)
+        tab_carting, tab_ftl = st.tabs(["🛒 Carting Routes", "🚚 FTL Routes"])
+        with tab_carting:
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("Baseline MAE (min) for Carting Routes", f"{base_mae:.2f}")
+                col2.metric("GraphSAGE MAE (min) for Carting Routes", f"{graph_mae:.2f}")
+                col3.metric("Baseline within-15% accuracy", f"{base_acc:.1f}%")
+                col4.metric("GraphSAGE within-15% accuracy", f"{graph_acc:.1f}%")
+                
+                st.plotly_chart(
+                            plot_model_comparison_bar(
+                                base_mae, graph_mae, base_acc,graph_acc,"Baseline vs. GraphSAGE Carting" ),
+                            use_container_width=True)
+
+                col1, col2 = st.columns(2)
+                with col1:
+                            st.plotly_chart(
+                                plot_pred_vs_actual(y_test_c, pred_graph_c, "GraphSAGE: Predicted vs. Actual for Carting Routes"),
+                                use_container_width=True,
+                            )
+                with col2:
+                            st.plotly_chart(
+                                plot_error_histogram(y_test_c, pred_graph_c, "GraphSAGE Prediction Error for Carting Routes"),
+                                use_container_width=True,
+                            )
+                base_mae_f = mean_absolute_error(y_test_f, y_pred_base_f)
+                graph_mae_f = mean_absolute_error(y_test_f, pred_graph_f)
+                base_acc_f = within_15_pct_accuracy(y_test_f, y_pred_base_f)
+                graph_acc_f = within_15_pct_accuracy(y_test_f, pred_graph_f)
+        with tab_ftl:
+                col5, col6, col7, col8 = st.columns(4)
+                col5.metric("Baseline MAE (min) for Carting Routes", f"{base_mae_f:.2f}")
+                col6.metric("GraphSAGE MAE (min) for Carting Routes", f"{graph_mae_f:.2f}")
+                col7.metric("Baseline within-15% accuracy", f"{base_acc_f:.1f}%")
+                col8.metric("GraphSAGE within-15% accuracy", f"{graph_acc_f:.1f}%")
+                
+                st.plotly_chart(
                     plot_model_comparison_bar(
-                        base_mae, graph_mae, base_acc,graph_acc,"Baseline vs. GraphSAGE Carting" ),
-                    use_container_width=True)
+                        base_mae_f, graph_mae_f, base_acc_f,graph_acc_f,"Baseline vs. GraphSAGE FTL"),
+                    use_container_width=True,)
 
-        col1, col2 = st.columns(2)
-        with col1:
-                    st.plotly_chart(
-                        plot_pred_vs_actual(y_test_c, pred_graph_c, "GraphSAGE: Predicted vs. Actual for Carting Routes"),
-                        use_container_width=True,
-                    )
-        with col2:
-                    st.plotly_chart(
-                        plot_error_histogram(y_test_c, pred_graph_c, "GraphSAGE Prediction Error for Carting Routes"),
-                        use_container_width=True,
-                    )
-        base_mae_f = mean_absolute_error(y_test_f, y_pred_base_f)
-        graph_mae_f = mean_absolute_error(y_test_f, pred_graph_f)
-        base_acc_f = within_15_pct_accuracy(y_test_f, y_pred_base_f)
-        graph_acc_f = within_15_pct_accuracy(y_test_f, pred_graph_f)
-        st.subheader("FTL route")
-        col5, col6, col7, col8 = st.columns(4)
-        col5.metric("Baseline MAE (min) for Carting Routes", f"{base_mae_f:.2f}")
-        col6.metric("GraphSAGE MAE (min) for Carting Routes", f"{graph_mae_f:.2f}")
-        col7.metric("Baseline within-15% accuracy", f"{base_acc_f:.1f}%")
-        col8.metric("GraphSAGE within-15% accuracy", f"{graph_acc_f:.1f}%")
-        
-        st.plotly_chart(
-            plot_model_comparison_bar(
-                base_mae_f, graph_mae_f, base_acc_f,graph_acc_f,"Baseline vs. GraphSAGE FTL"),
-            use_container_width=True,)
-
-        
-        col7, col8 = st.columns(2)
-        with col7:
-                    st.plotly_chart(
-                        plot_pred_vs_actual(y_test_f, pred_graph_f, "GraphSAGE: Predicted vs. Actual for FTL Routes"),
-                        use_container_width=True,
-                    )
-        with col8:
-                    st.plotly_chart(
-                        plot_error_histogram(y_test_f, pred_graph_f, "GraphSAGE Prediction Error for FTL Routes"),
-                        use_container_width=True,
-                    )
+                
+                col7, col8 = st.columns(2)
+                with col7:
+                            st.plotly_chart(
+                                plot_pred_vs_actual(y_test_f, pred_graph_f, "GraphSAGE: Predicted vs. Actual for FTL Routes"),
+                                use_container_width=True,
+                            )
+                with col8:
+                            st.plotly_chart(
+                                plot_error_histogram(y_test_f, pred_graph_f, "GraphSAGE Prediction Error for FTL Routes"),
+                                use_container_width=True,
+                            )
 elif page == "Decision Framework":
     import torch
     import joblib
@@ -263,18 +276,40 @@ elif page == "Decision Framework":
         "Enter a shipment's parameters to get a cost/risk-based route recommendation, "
         "backed by the trained ETA model and the network's structural risk scores."
     )
-    facilities = sorted(set(corridor_df["source_center"]) | set(corridor_df["destination_center"]))
+    facilities_s = sorted(set(corridor_df["source_center"]) )
+    facilities_d = sorted(set(corridor_df["destination_center"]))
     route_types = list(corridor_df["route_type"].unique())
     time_labels = {0: "Night", 1: "Morning", 2: "Afternoon", 3: "Evening"}
 
-    with st.form("decision_form"):
-        c1, c2 = st.columns(2)
-        with c1:
-            source_center = st.selectbox("Source hub", facilities)
-            st.write(df[df["source_center"]==source_center]['source_name'].unique()[0])
-            destination_center = st.selectbox("Destination hub", facilities, index=min(1, len(facilities) - 1))
-            st.write(df[df["destination_center"]==destination_center]['destination_name'].unique()[0])
+    
+    c1, c2 = st.columns(2)
+    with c1:
+            source_center = st.selectbox( "Source hub",facilities_s,accept_new_options=False)
+
+            source_name = df.loc[df["source_center"] == source_center,"source_name"].dropna().unique()
+
+            if len(source_name) > 0:
+                  st.write(source_name[0])
+            else:
+               st.warning("Source name not found.")
+
+
+            destination_center = st.selectbox("Destination hub", facilities_d, accept_new_options=False)
+            destination_name = df.loc[ df["destination_center"] == destination_center,"destination_name"].dropna().unique()
+
+            if len(destination_name) > 0:
+               st.write(destination_name[0])
+            else:
+               st.warning("Destination name not found.")
+
+
+            if source_center == destination_center:
+                  st.warning("Both source center and destination center are same")
+
+        
+            #st.write(df[df["destination_center"]==destination_center]['destination_name'].unique()[0])
             time_of_day = st.selectbox("Time of day", list(time_labels.keys()), format_func=lambda k: time_labels[k])
+    with st.form("decision_form"):
         with c2:
             #distance_km = st.number_input("Distance (km)", min_value=1.0, value=100.0, step=10.0)
             distance_km = corridor_df[(corridor_df["source_center"]==source_center) & (corridor_df["destination_center"]==destination_center)]["osrm_distance"].median()
