@@ -72,9 +72,9 @@ def critical_hub_find(corridor_df):
     'Total_Breaches': [hub_breach_counts[n] for n in G_nx.nodes()]
 })
     if total_network_breaches > 0:
-        hub_metrics_df['SLA_Breach_Contribution_%'] = (hub_metrics_df['Total_Breaches'] / total_network_breaches) * 100
+        hub_metrics_df['SLA_Breach_Contribution'] = (hub_metrics_df['Total_Breaches'] / total_network_breaches) 
     else:
-        hub_metrics_df['SLA_Breach_Contribution_%'] = 0
+        hub_metrics_df['SLA_Breach_Contribution'] = 0
 
     top_in_degree= hub_metrics_df[hub_metrics_df['In_Degree']>=10].sort_values(by='In_Degree', ascending=False).reset_index(drop=True)
     top_in_degree=top_in_degree[['Facility', 'In_Degree']]
@@ -298,6 +298,8 @@ class RouteDecisionFramework:
             
         return {
             'Recommendation': recommendation,
+            'predicted_ETA_FTL': round(pred_eta_ftl, 2),
+            'predicted_ETA_Carting': round(pred_eta_carting, 2),
             'Est_Cost_per_Unit_FTL': round(cost_ftl, 2),
             'Est_Cost_per_Unit_Carting': round(cost_carting, 2),
             'Utility_Score_Difference': round(savings, 2),

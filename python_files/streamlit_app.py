@@ -130,7 +130,7 @@ elif page == "Corridor Analysis":
 elif page == "Bottleneck Analysis":
     st.subheader("Top Bottleneck Hubs")
     st.dataframe(
-        hub_metrics_df.sort_values(by="SLA_Breach_Contribution_%", ascending=False).head(20),
+        hub_metrics_df.sort_values(by="SLA_Breach_Contribution", ascending=False).head(20),
         use_container_width=True,
     )
 
@@ -140,7 +140,7 @@ elif page == "Bottleneck Analysis":
         st.plotly_chart(plot_bottleneck_bar(hub_metrics_df, "In_Degree"), use_container_width=True)
     with metric_cols[1]:
         st.plotly_chart(plot_bottleneck_bar(hub_metrics_df, "Out_Degree"), use_container_width=True)
-        st.plotly_chart(plot_bottleneck_bar(hub_metrics_df, "SLA_Breach_Contribution_%"), use_container_width=True)
+        st.plotly_chart(plot_bottleneck_bar(hub_metrics_df, "SLA_Breach_Contribution"), use_container_width=True)
 
     st.plotly_chart(plot_bottleneck_bar(hub_metrics_df, "Clustering"), use_container_width=True)
 
@@ -318,7 +318,7 @@ elif page == "Decision Framework":
             sla_deadline_hours = st.number_input("SLA deadline (hours)", min_value=0.5, value=10.0, step=0.5)
         submitted = st.form_submit_button("Get Recommendation")
 
-    risk_lookup = dict(zip(hub_metrics_df["Facility"],hub_metrics_df["SLA_Breach_Contribution_%"]))
+    risk_lookup = dict(zip(hub_metrics_df["Facility"],hub_metrics_df["SLA_Breach_Contribution"]))
     if submitted:
      framework = RouteDecisionFramework(hub_risk_lookup=risk_lookup) 
      decision = framework.evaluate_tradeoff(
