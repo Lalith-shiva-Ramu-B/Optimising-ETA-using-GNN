@@ -32,7 +32,8 @@ if upload_file is None:
 
 with st.spinner("Processing data..."):
     df=load_data(upload_file)
-    df.drop(columns=["route_schedule_uuid","cutoff_timestamp","trip_uuid","cutoff_timestamp"])
+    df = df[df['is_cutoff'] == True].copy()
+    df.drop(columns=["route_schedule_uuid","cutoff_timestamp","trip_creation_time"],inplace=True)
     df['od_start_time'] = pd.to_datetime( df['od_start_time'], format='%d-%m-%Y %H:%M',errors='coerce')
     df['hour'] = df['od_start_time'].dt.hour 
     df['time_of_day'] =df['hour'].apply(time_bucket)
@@ -50,7 +51,7 @@ page = st.sidebar.radio(
     ),
 )
 with st.expander("Data preview"):
-    df.drop(columns=["route_schedule_uuid","cutoff_timestamp","trip_uuid","cutoff_timestamp"])
+    #df.drop(columns=["route_schedule_uuid","cutoff_timestamp"],inplace=True)
     st.dataframe(df)
 corridor_df=corridor_setup(df)
 breached_df=breached_find(corridor_df)

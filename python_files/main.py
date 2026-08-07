@@ -49,10 +49,10 @@ def critical_hub_find(corridor_df):
     G_nx = nx.DiGraph()
 # Add edges with the median delay ratio acting as the mathematical weight
     for _, row in corridor_df.iterrows():
-            G_nx.add_edge(row['source_center'], row['destination_center'], weight=row['median_delay_ratio'])
+            G_nx.add_edge(row['source_center'], row['destination_center'], weight=1/max(row['median_delay_ratio'],1e-3))
     dict_in_degree = dict(G_nx.in_degree())
     dict_out_degree = dict(G_nx.out_degree())
-    dict_betweenness = nx.betweenness_centrality(G_nx, weight='weight',normalized=True)
+    dict_betweenness = nx.betweenness_centrality(G_nx,weight='weight',normalized=True)
     dict_clustering = nx.clustering(G_nx.to_undirected())
 
     hub_breach_counts = {node: 0 for node in G_nx.nodes()}  
