@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime
 from main import (corridor_setup,critical_hub_find,breached_find,time_bucket,GraphSAGE,
-                  build_graph,graph_data,within_15_pct_accuracy,RouteDecisionFramework)
+                  build_graph,graph_data,within_15_pct_accuracy,predict_dynamic_eta,RouteDecisionFramework)
 from plots import (
     kpi_indicator,
     plot_bottleneck_bar,
@@ -182,8 +182,8 @@ elif page == "ML Model":
 
         st.subheader("Baseline (Random Forest) vs. GraphSAGE")
         with st.spinner("Generating predictions and calculating metrics..."):
-                test_src_f, test_dst_f, tab_test_f,X_train_base_f, y_train_f,X_test_base_f,y_test_f,graph_f =graph_data(ftl_df)
-                test_src_c, test_dst_c, tab_test_c,X_train_base_c, y_train_c,X_test_base_c,y_test_c,graph_c =graph_data(cart_df)
+                test_src_f, test_dst_f, tab_test_f,X_train_base_f, y_train_f,X_test_base_f,y_test_f,graph_f,node_mapping_f,scaler_f =graph_data(ftl_df)
+                test_src_c, test_dst_c, tab_test_c,X_train_base_c, y_train_c,X_test_base_c,y_test_c,graph_c,node_mapping_c,scaler_c =graph_data(cart_df)
                 model_f,model_c= load_model()
                 with torch.no_grad():
                     pred_graph_f = model_f(graph_f.x, graph_f.edge_index, test_src_f, test_dst_f, tab_test_f).cpu().numpy()
@@ -294,42 +294,6 @@ elif page == "Decision Framework":
     facilities_d = sorted(set(corridor_df["destination_center"]))
     route_types = list(corridor_df["route_type"].unique())
     time_labels = {0: "Night", 1: "Morning", 2: "Afternoon", 3: "Evening"}
-
-    def predict_dynamic_eta(model, graph, df, src_name, dst_name, node_mapping, scaler):
-        
-                    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
-        # 1. Safely check if nodes exist in the graph mapping
-                    if src_name not in node_mapping or dst_name not in node_mapping:
-                           return df["segment_actual_time"].median() # Fallback for completely unseen nodes
-            
-                    src_idx = node_mapping[src_name]
-                    dst_idx = node_mapping[dst_name]
-        
-        # 2. Extract base features for the selected route
-                    route_df = df[(df["source_center"] == src_name) & (df["destination_center"] == dst_name)]
-        
-                    if route_df.empty:
-                        return df["segment_actual_time"].median() # Fallback if specific route combination has no data
-            
-                    BASE_FEATURES = ["segment_osrm_time", "segment_osrm_distance", "time_of_day"]
-        
-        # 3. Transform features using the ALREADY FITTED scaler from training
-                    raw_features = route_df[BASE_FEATURES].fillna(0).median().values.reshape(1, -1)
-                    scaled_features = scaler.transform(raw_features)
-        
-        # 4. Create tensors
-                    src_tensor = torch.tensor([src_idx], dtype=torch.long, device=device)
-                    dst_tensor = torch.tensor([dst_idx], dtype=torch.long, device=device)
-                    tab_tensor = torch.tensor(scaled_features, dtype=torch.float32, device=device)
-        
-        # 5. Predict
-                    model.eval()
-                    model.to(device)
-                    with torch.no_grad():
-                        graph = graph.to(device)
-                        pred = model(graph.x, graph.edge_index, src_tensor, dst_tensor, tab_tensor)
-                        return pred.item()
     
     c1, c2 = st.columns(2)
     with c1:
