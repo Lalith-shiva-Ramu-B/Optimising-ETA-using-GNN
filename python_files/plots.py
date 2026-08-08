@@ -106,10 +106,10 @@ def plot_bottleneck_bar(hub_metrics_df: pd.DataFrame, metric: str, top_n: int = 
         top_df.sort_values(by=metric), x=metric, y="Facility", orientation="h",
         title=f"Top {top_n} facilities by {metric}",
     )
-    fig.update_layout(height=450, margin=dict(l=10, r=10, t=40, b=10,
+    fig.update_layout(height=450, margin=dict(l=10, r=10, t=40, b=10),
         template='plotly_dark',paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(family='Inter, sans-serif')))
+        font=dict(family='Inter, sans-serif'))
     return fig
 
 
