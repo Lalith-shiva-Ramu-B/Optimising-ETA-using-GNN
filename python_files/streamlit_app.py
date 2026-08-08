@@ -1,9 +1,11 @@
-from xml.parsers.expat import model
-
 import numpy as np
 import pandas as pd
 import streamlit as st
-from datetime import datetime
+import torch
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error
+import joblib
+from pathlib import Path
 from main import (corridor_setup,critical_hub_find,breached_find,time_bucket,GraphSAGE,
                   build_graph,graph_data,within_15_pct_accuracy,predict_dynamic_eta,RouteDecisionFramework)
 from plots import (
@@ -17,23 +19,152 @@ from plots import (
     plot_route_type_comparison,
     plot_time_of_day_comparison,plot_route_type_breaches,plot_time_of_day_breaches
 )
-st.set_page_config(page_title='ETA Analytics Dashboard', page_icon="🚚", layout='wide')
 
-st.title("🚚 ETA Analytics & Routing Dashboard")
-st.markdown("Monitor network performance, identify bottlenecks, and optimize logistics routing.")
-st.divider()
-@st.cache_data
-def load_data(path):
-    data= pd.read_csv(path)
-    return data
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@400;600;700&display=swap');
+html, body, [class*="css"]  {
+    font-family: 'Inter', sans-serif;
+}
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', sans-serif !important;
+}
+.stApp {
+    background-color: #0E1117;
+}
+[data-testid="stSidebar"] {
+    background-color: #161B22;
+    border-right: 1px solid rgba(255,255,255,0.1);
+}
+.stMetric {
+    background: rgba(255,255,255,0.05);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.1);
+    padding: 1rem;
+}
+div[role="radiogroup"] > label:hover {
+    color: #4FC3F7;
+    transition: color 0.2s ease;
+}
+.stTabs [data-baseweb="tab-list"] {
+    gap: 2rem;
+}
+.stTabs [data-baseweb="tab"] {
+    height: 3rem;
+    white-space: pre-wrap;
+    background-color: transparent;
+    border-radius: 0;
+    color: #8B949E;
+}
+.stTabs [aria-selected="true"] {
+    color: #4FC3F7 !important;
+    border-bottom: 2px solid #4FC3F7 !important;
+}
+.stButton > button {
+    background: linear-gradient(135deg, #4FC3F7, #00BFA5) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+.stButton > button:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(79, 195, 247, 0.3) !important;
+}
+[data-testid="stDataFrame"] {
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+}
+[data-testid="stDataFrame"] th {
+    background-color: rgba(79,195,247,0.1) !important;
+    color: #E6EDF3 !important;
+}
+[data-testid="stFileUploader"] {
+    background: rgba(255,255,255,0.02);
+    border: 1px dashed rgba(255,255,255,0.2);
+    border-radius: 12px;
+    padding: 1rem;
+}
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #0E1117; 
+}
+::-webkit-scrollbar-thumb {
+    background: #30363D; 
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #4FC3F7; 
+}
+[data-testid="stForm"] {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+.interactive-element:hover {
+    transform: translateY(-2px);
+    transition: all 0.3s ease;
+}
+</style>
+""", unsafe_allow_html=True)
+st.markdown("""
+<div style="text-align: center; padding: 1rem 0 0.5rem 0;">
+    <h1 style="font-family: 'Outfit', sans-serif; font-size: 2.4rem; 
+        background: linear-gradient(135deg, #4FC3F7, #00BFA5);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        margin-bottom: 0.2rem;">🚚 ETA Analytics & Routing Dashboard</h1>
+    <p style="color: #8B949E; font-size: 1rem; font-family: 'Inter', sans-serif;">
+        Monitor network performance · Identify bottlenecks · Optimize logistics routing</p>
+</div>
+""", unsafe_allow_html=True)
+#st.divider()
+# @st.cache_data
+# def load_data(path):
+#     data= pd.read_csv(path)
+#     return data
 
-upload_file=st.sidebar.file_uploader("Choose the file")
-if upload_file is None:
-    st.info("upload a file in sidebar")
-    st.stop()
+@st.cache_data(show_spinner="Loading delivery dataset...")
+def load_data():
+    """Auto-load dataset from the Dataset folder."""
+    data_path = Path(__file__).resolve().parent.parent / "Dataset" / "delivery_data.csv"
+    if not data_path.exists():
+        st.error(f"Dataset not found at: {data_path}")
+        st.stop()
+    return pd.read_csv(data_path)
+df = load_data()
+
+#upload_file=st.sidebar.file_uploader("Choose the file")
+def section_header(title, subtitle=""):
+    sub = f'<p style="color: #8B949E; font-size: 0.9rem;">{subtitle}</p>' if subtitle else ''
+    st.markdown(f"""
+    <div style="margin: 1rem 0;">
+        <h2 style="font-family: 'Outfit', sans-serif; color: #E6EDF3; margin-bottom: 0.2rem;">{title}</h2>
+        {sub}
+        <div style="height: 3px; width: 60px; background: linear-gradient(90deg, #4FC3F7, #00BFA5); border-radius: 2px; margin-top: 0.5rem;"></div>
+    </div>
+    """, unsafe_allow_html=True)
+def render_kpi_card(icon, label, value, suffix=""):
+    return f"""
+    <div style="background: rgba(255,255,255,0.05); backdrop-filter: blur(10px);
+                border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;
+                padding: 1.2rem; text-align: center; transition: transform 0.2s ease;">
+        <div style="font-size: 1.8rem; margin-bottom: 0.3rem;">{icon}</div>
+        <div style="font-family: 'Outfit', sans-serif; font-size: 1.8rem; font-weight: 700;
+                    background: linear-gradient(135deg, #4FC3F7, #00BFA5);
+                    -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+            {value:,.0f}{suffix}</div>
+        <div style="color: #8B949E; font-size: 0.85rem; margin-top: 0.3rem;
+                    font-family: 'Inter', sans-serif;">{label}</div>
+    </div>
+    """
 
 with st.spinner("Processing data..."):
-    df=load_data(upload_file)
+    #df=load_data(upload_file)
     df = df[df['is_cutoff'] == True].copy()
     df.drop(columns=["route_schedule_uuid","cutoff_timestamp","trip_creation_time"],inplace=True)
     df['od_start_time'] = pd.to_datetime( df['od_start_time'], format='%d-%m-%Y %H:%M',errors='coerce')
@@ -55,10 +186,6 @@ page = st.sidebar.radio(
 with st.expander("Data preview"):
     st.dataframe(df)
 
-@st.cache_data
-def load_data(path):
-    data = pd.read_csv(path)
-    return data
 
 # --- add these here, all in one place ---
 @st.cache_data(show_spinner="Building corridor graph...")
@@ -76,6 +203,14 @@ def cached_critical_hub_find(corridor_df: pd.DataFrame):
 @st.cache_data(show_spinner="Building network graph...")
 def cached_build_graph(corridor_df: pd.DataFrame):
     return build_graph(corridor_df)
+
+@st.cache_resource
+def load_model():
+    BASE_DIR = Path(__file__).resolve().parent
+    MODEL_PATH_f = BASE_DIR  / "ftl_model.joblib"
+    MODEL_PATH_c = BASE_DIR  / "cart_model.joblib"
+    return joblib.load(MODEL_PATH_f),joblib.load(MODEL_PATH_c)
+ftl_model, cart_model = load_model()
 corridor_df=cached_corridor_setup(df)
 breached_df=cached_breached_find(corridor_df)
 critical_hubs, hub_metrics_df=cached_critical_hub_find(corridor_df)
@@ -84,17 +219,15 @@ if page == "Executive Dashboard":
         st.subheader("Key Performance Indicators")
         column_1, column_2, column_3, column_4, column_5 =st.columns(5)
         with column_1:
-               st.plotly_chart(kpi_indicator("Total Trips", len(df)), use_container_width=True)
+             st.markdown(render_kpi_card("📦", "Total Trips", len(df)), unsafe_allow_html=True)
         with column_2:
-               st.plotly_chart(kpi_indicator("Total Hubs", df["source_center"].nunique()), use_container_width=True)
+               st.markdown(render_kpi_card("🏢", "Total Hubs", df["source_center"].nunique()), unsafe_allow_html=True)
         with column_3:
-               st.plotly_chart(kpi_indicator("Total Corridors", len(corridor_df)), use_container_width=True)
+               st.markdown(render_kpi_card("🛣️", "Total Corridors", len(corridor_df)), unsafe_allow_html=True)
         with column_4:
-                st.plotly_chart(kpi_indicator("Breached Corridors", len(breached_df)), use_container_width=True)
+                st.markdown(render_kpi_card("⚠️", "Breached Corridors", len(breached_df)), unsafe_allow_html=True)
         with column_5:
-               st.plotly_chart(
-            kpi_indicator("Avg Delay Ratio", float(np.mean(corridor_df["median_delay_ratio"])), suffix="x"),
-            use_container_width=True)
+               st.markdown(render_kpi_card("⏱️", "Avg Delay Ratio", float(np.mean(corridor_df["median_delay_ratio"])), suffix="x"), unsafe_allow_html=True)
 
 elif page == "Network Analysis":
     st.subheader("Interactive Corridor Network")
@@ -168,18 +301,7 @@ elif page == "Bottleneck Analysis":
     st.plotly_chart(plot_bottleneck_bar(hub_metrics_df, "Clustering"), use_container_width=True)
 
 elif page == "ML Model":
-        import torch
-        from sklearn.ensemble import RandomForestRegressor
-        from sklearn.metrics import mean_absolute_error
-        import joblib
-        from pathlib import Path
-        @st.cache_resource
-        def load_model():
-            BASE_DIR = Path(__file__).resolve().parent
-            MODEL_PATH_f = BASE_DIR  / "ftl_model.joblib"
-            MODEL_PATH_c = BASE_DIR  / "cart_model.joblib"
-            return joblib.load(MODEL_PATH_f),joblib.load(MODEL_PATH_c)
-
+        
         st.subheader("Baseline (Random Forest) vs. GraphSAGE")
         with st.spinner("Generating predictions and calculating metrics..."):
                 test_src_f, test_dst_f, tab_test_f,X_train_base_f, y_train_f,X_test_base_f,y_test_f,graph_f,node_mapping_f,scaler_f =graph_data(ftl_df)
@@ -261,16 +383,6 @@ elif page == "ML Model":
                                 use_container_width=True,
                             )
 elif page == "Decision Framework":
-    import torch
-    import joblib
-    from pathlib import Path
-    @st.cache_resource
-    def load_model():
-            BASE_DIR = Path(__file__).resolve().parent
-            MODEL_PATH_f = BASE_DIR  / "ftl_model.joblib"
-            MODEL_PATH_c = BASE_DIR  / "cart_model.joblib"
-            return joblib.load(MODEL_PATH_f),joblib.load(MODEL_PATH_c)
-
     test_src_f, test_dst_f, tab_test_f,X_train_base_f, y_train_f,X_test_base_f,y_test_f,graph_f,node_mapping_f,scaler_f =graph_data(ftl_df)
     test_src_c, test_dst_c, tab_test_c,X_train_base_c, y_train_c,X_test_base_c,y_test_c,graph_c,node_mapping_c,scaler_c =graph_data(cart_df)
     model_f, model_c= load_model()
@@ -355,8 +467,38 @@ elif page == "Decision Framework":
         destination_center=destination_center,
         time_of_day=time_of_day
 )
-        for key, value in decision.items():
-          st.write(f"{key}: {value}")
-
+        # for key, value in decision.items():
+        #   st.write(f"{key}: {value}")
+        if decision['Recommendation'] == 'FTL':
+            rec_color, rec_icon = '#4FC3F7', '🚛'
+        else:
+            rec_color, rec_icon = '#00BFA5', '🛒'
+        
+        st.markdown(f"""
+        <div style="background: rgba(255,255,255,0.05); backdrop-filter: blur(10px);
+                    border: 1px solid {rec_color}40; border-radius: 16px; padding: 2rem; margin: 1rem 0;">
+            <div style="text-align: center; margin-bottom: 1.5rem;">
+                <span style="font-size: 3rem;">{rec_icon}</span>
+                <h2 style="font-family: 'Outfit', sans-serif; color: {rec_color}; margin: 0.5rem 0 0.2rem 0;">
+                    Recommended: {decision['Recommendation']}</h2>
+                <p style="color: #8B949E; font-style: italic;">{decision['Reasoning']}</p>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div style="background: rgba(79,195,247,0.1); border-radius: 10px; padding: 1rem; text-align: center;">
+                    <div style="color: #8B949E; font-size: 0.8rem;">FTL ETA</div>
+                    <div style="color: #4FC3F7; font-size: 1.4rem; font-weight: 700;">{decision['predicted_ETA_FTL']} hrs</div>
+                    <div style="color: #8B949E; font-size: 0.8rem; margin-top: 0.3rem;">₹{decision['Est_Cost_per_Unit_FTL']}/pkg</div>
+                </div>
+                <div style="background: rgba(0,191,165,0.1); border-radius: 10px; padding: 1rem; text-align: center;">
+                    <div style="color: #8B949E; font-size: 0.8rem;">Carting ETA</div>
+                    <div style="color: #00BFA5; font-size: 1.4rem; font-weight: 700;">{decision['predicted_ETA_Carting']} hrs</div>
+                    <div style="color: #8B949E; font-size: 0.8rem; margin-top: 0.3rem;">₹{decision['Est_Cost_per_Unit_Carting']}/pkg</div>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1);">
+                <span style="color: #FFB74D; font-weight: 600;">Utility Score Difference: ₹{decision['Utility_Score_Difference']}</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     if submitted is False:
         st.info("Fill in the shipment parameters and click 'Get Recommendation' to see the route decision.")

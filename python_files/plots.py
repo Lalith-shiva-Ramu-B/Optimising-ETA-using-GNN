@@ -15,10 +15,13 @@ def kpi_indicator(label: str, value: float, prefix: str = "", suffix: str = ""):
             mode="number",
             value=value,
             number={"prefix": prefix, "suffix": suffix, "font": {"size": 28}},
-            title={"text": label, "font": {"size": 16}},
+            title={"text": label, "font": {"size": 16,"color": "white"}},
         )
     )
-    fig.update_layout(height=120, margin=dict(l=10, r=10, t=40, b=10))
+    fig.update_layout(height=120, margin=dict(l=10, r=10, t=40, b=10), template='plotly_dark',
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='Inter, sans-serif'))
     return fig
 
 
@@ -87,7 +90,10 @@ def plot_network(
         xaxis=dict(visible=False), yaxis=dict(visible=False),
         height=650, margin=dict(l=10, r=10, t=30, b=10),
         title="Logistics Network (node size = degree, orange = bottleneck hub, red = breached lane)",
-    )
+        template='plotly_dark',
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='Inter, sans-serif'))
     return fig
 
 
@@ -100,7 +106,10 @@ def plot_bottleneck_bar(hub_metrics_df: pd.DataFrame, metric: str, top_n: int = 
         top_df.sort_values(by=metric), x=metric, y="Facility", orientation="h",
         title=f"Top {top_n} facilities by {metric}",
     )
-    fig.update_layout(height=450, margin=dict(l=10, r=10, t=40, b=10))
+    fig.update_layout(height=450, margin=dict(l=10, r=10, t=40, b=10,
+        template='plotly_dark',paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='Inter, sans-serif')))
     return fig
 
 
@@ -111,7 +120,10 @@ def plot_delay_ratio_distribution(corridor_df: pd.DataFrame):
         title="Distribution of Median Delay Ratio Across Corridors",
     )
     fig.add_vline(x=1.2, line_dash="dash", line_color="red", annotation_text="20% SLA threshold")
-    fig.update_layout(height=400, margin=dict(l=10, r=10, t=40, b=10))
+    fig.update_layout(height=400, margin=dict(l=10, r=10, t=40, b=10),template='plotly_dark',
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='Inter, sans-serif'))
     return fig
 
 
@@ -139,8 +151,13 @@ def plot_route_type_breaches(breached_df: pd.DataFrame):
         summary, x="route_type", y="total_breaches", color="route_type",
         title="Total Breaches by Route Type",
         hover_data=["total_trips"],
+        color_discrete_sequence=['#4FC3F7', '#00BFA5', '#FFB74D', '#EF5350', '#AB47BC']
     )
-    fig.update_layout(height=400, margin=dict(l=10, r=10, t=40, b=10), showlegend=False)
+    fig.update_layout(height=400, margin=dict(l=10, r=10, t=40, b=10), showlegend=False,
+                      template='plotly_dark',
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='Inter, sans-serif'))
     return fig
 def plot_time_of_day_comparison(corridor_df: pd.DataFrame):
     bucket_labels = {0: "Night", 1: "Morning", 2: "Afternoon", 3: "Evening"}
@@ -155,7 +172,10 @@ def plot_time_of_day_comparison(corridor_df: pd.DataFrame):
         hover_data=["total_breaches"],
         category_orders={"time_of_day_label": ["Night", "Morning", "Afternoon", "Evening"]},
     )
-    fig.update_layout(height=400, margin=dict(l=10, r=10, t=40, b=10))
+    fig.update_layout(height=400, margin=dict(l=10, r=10, t=40, b=10), template='plotly_dark',
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='Inter, sans-serif'))
     return fig
 
 def plot_time_of_day_breaches(breached_df: pd.DataFrame):
@@ -171,7 +191,10 @@ def plot_time_of_day_breaches(breached_df: pd.DataFrame):
         hover_data=["avg_delay_ratio"],
         category_orders={"time_of_day_label": ["Night", "Morning", "Afternoon", "Evening"]},
     )
-    fig.update_layout(height=400, margin=dict(l=10, r=10, t=40, b=10))
+    fig.update_layout(height=400, margin=dict(l=10, r=10, t=40, b=10), template='plotly_dark',
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='Inter, sans-serif'))
     return fig
 
 # ML model evaluation
@@ -182,7 +205,11 @@ def plot_model_comparison_bar(base_mae: float, graph_mae: float, base_acc: float
     fig.add_trace(go.Bar(name="GraphSAGE", x=["MAE (mins)", "Within-15% Accuracy (%)"],
                           y=[graph_mae, graph_acc]))
     fig.update_layout(barmode="group", height=400, title=title,
-                       margin=dict(l=10, r=10, t=40, b=10))
+                       margin=dict(l=10, r=10, t=40, b=10),
+                       template='plotly_dark',
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='Inter, sans-serif'))
     return fig
 
 def plot_pred_vs_actual(y_true: np.ndarray, y_pred: np.ndarray, title: str):
@@ -194,12 +221,20 @@ def plot_pred_vs_actual(y_true: np.ndarray, y_pred: np.ndarray, title: str):
     lo, hi = float(np.min(y_true)), float(np.max(y_true))
     fig.add_trace(go.Scatter(x=[lo, hi], y=[lo, hi], mode="lines", name="Perfect prediction",
                               line=dict(dash="dash", color="red")))
-    fig.update_layout(height=450, margin=dict(l=10, r=10, t=40, b=10))
+    fig.update_layout(height=450, margin=dict(l=10, r=10, t=40, b=10),
+                      template='plotly_dark',
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='Inter, sans-serif'))
     return fig
 
 def plot_error_histogram(y_true: np.ndarray, y_pred: np.ndarray, title: str):
     errors = np.asarray(y_pred) - np.asarray(y_true)
     fig = px.histogram(x=errors, nbins=50, title=title, labels={"x": "Prediction error (mins)"})
     fig.add_vline(x=0, line_dash="dash", line_color="black")
-    fig.update_layout(height=400, margin=dict(l=10, r=10, t=40, b=10))
+    fig.update_layout(height=400, margin=dict(l=10, r=10, t=40, b=10),
+                      template='plotly_dark',
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='Inter, sans-serif'))
     return fig
