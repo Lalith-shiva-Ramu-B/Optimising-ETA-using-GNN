@@ -417,8 +417,6 @@ elif page == "Decision Framework":
         return f"{name}  [{code}]" if name else code
     # ── Build route adjacency (source → set of valid destinations) ──────
     route_pairs = corridor_df[["source_center", "destination_center"]].drop_duplicates()
-    #src_to_dsts = route_pairs.groupby("source_center")["destination_center"].apply(lambda x: sorted(set(x))).to_dict()
-
     src_to_dsts = {}
     for src, dst in zip(corridor_df["source_center"], corridor_df["destination_center"]):
         if src != dst:                         # exclude self-loops
@@ -426,10 +424,6 @@ elif page == "Decision Framework":
     # convert sets to sorted lists for selectbox
     src_to_dsts = {k: sorted(v, key=fmt_centre) for k, v in src_to_dsts.items()}
     all_sources = sorted(set(corridor_df["source_center"]))
-
-    #facilities_s = sorted(set(corridor_df["source_center"]) )
-    #facilities_d = sorted(set(corridor_df["destination_center"]))
-    #route_types = list(corridor_df["route_type"].unique())
     time_labels = {0: "Night", 1: "Morning", 2: "Afternoon", 3: "Evening"}
     
     c1, c2 = st.columns(2)
@@ -454,11 +448,6 @@ elif page == "Decision Framework":
                                               #facilities_d, accept_new_options=False)
             destination_name = df.loc[ df["destination_center"] == destination_center,"destination_name"].dropna().unique()
 
-            # if len(destination_name) > 0:
-            #    st.write(destination_name[0])
-            # else:
-            #    st.warning("Destination name not found.")
-
             route_count = len(corridor_df[
             (corridor_df["source_center"] == source_center) &
             (corridor_df["destination_center"] == destination_center)
@@ -476,11 +465,12 @@ elif page == "Decision Framework":
                  st.error("Route is doesn't exist")
             volume = st.number_input("Shipment volume (packages)", min_value=1.0, value=200.0, step=10.0)
             sla_deadline_hours = st.number_input("SLA deadline (hours)", min_value=0.5, value=10.0, step=0.5)
+            sla_penalty = st.number_input("SLA penalty per hour (₹)", min_value=0.0, value=100.0, step=10.0)
         submitted = st.form_submit_button("Get Recommendation")
 
     risk_lookup = dict(zip(hub_metrics_df["Facility"],hub_metrics_df["SLA_Breach_Contribution"]))
     if submitted:
-        #print("distnace travelled: ",distance_km)
+
         ftl_median = ftl_results[(ftl_results["source_center"]==source_center) & (ftl_results["destination_center"]==destination_center)]["graph_prediction"].median()
         
         if pd.isna(ftl_median):
@@ -488,14 +478,14 @@ elif page == "Decision Framework":
         else:
             pred_etl_ftl = ftl_median
             
-        # --- 2. Independently evaluate Carting ---
+
         cart_median = cart_results[(cart_results["source_center"]==source_center) & (cart_results["destination_center"]==destination_center)]["graph_prediction"].median()
         
         if pd.isna(cart_median):
             pred_etl_carting = predict_dynamic_eta(model_c, graph_c, cart_df, source_center, destination_center, node_mapping_c, scaler_c)
         else:
             pred_etl_carting = cart_median
-        framework = RouteDecisionFramework(hub_risk_lookup=risk_lookup) 
+        framework = RouteDecisionFramework(hub_risk_lookup=risk_lookup,sla_penalty_per_hour=sla_penalty) 
         decision = framework.evaluate_tradeoff(
         distance_km=distance_km,
         current_volume=volume,
