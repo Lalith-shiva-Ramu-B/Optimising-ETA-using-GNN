@@ -190,6 +190,7 @@ with st.expander("Data preview"):
 # --- add these here, all in one place ---
 @st.cache_data(show_spinner="Building corridor graph...")
 def cached_corridor_setup(df: pd.DataFrame) -> pd.DataFrame:
+    print(corridor_setup(df))
     return corridor_setup(df)
 
 @st.cache_data(show_spinner="Finding breached corridors...")
@@ -435,13 +436,15 @@ elif page == "Decision Framework":
     with st.form("decision_form"):
         with c2:
             distance_km = corridor_df[(corridor_df["source_center"]==source_center) & (corridor_df["destination_center"]==destination_center)]["actual_distance_to_destination"].median()
+            if distance_km is np.nan:
+                 st.warning("Route is doesn't exist")
             volume = st.number_input("Shipment volume (packages)", min_value=1.0, value=200.0, step=10.0)
             sla_deadline_hours = st.number_input("SLA deadline (hours)", min_value=0.5, value=10.0, step=0.5)
         submitted = st.form_submit_button("Get Recommendation")
 
     risk_lookup = dict(zip(hub_metrics_df["Facility"],hub_metrics_df["SLA_Breach_Contribution"]))
     if submitted:
-
+        #print("distnace travelled: ",distance_km)
         ftl_median = ftl_results[(ftl_results["source_center"]==source_center) & (ftl_results["destination_center"]==destination_center)]["graph_prediction"].median()
         
         if pd.isna(ftl_median):
