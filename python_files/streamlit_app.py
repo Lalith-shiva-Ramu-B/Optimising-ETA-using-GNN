@@ -403,31 +403,67 @@ elif page == "Decision Framework":
         "Enter a shipment's parameters to get a cost/risk-based route recommendation, "
         "backed by the trained ETA model and the network's structural risk scores."
     )
-    facilities_s = sorted(set(corridor_df["source_center"]) )
-    facilities_d = sorted(set(corridor_df["destination_center"]))
-    route_types = list(corridor_df["route_type"].unique())
+    _src_names = df[["source_center", "source_name"]].drop_duplicates().dropna()
+    _dst_names = df[["destination_center", "destination_name"]].drop_duplicates().dropna()
+    centre_name_map = {}
+    for _, row in _src_names.iterrows():
+        centre_name_map[row["source_center"]] = row["source_name"]
+    for _, row in _dst_names.iterrows():
+        if row["destination_center"] not in centre_name_map:
+            centre_name_map[row["destination_center"]] = row["destination_name"]
+    def fmt_centre(code):
+        """Display as 'CentreName  [Code]' so the selectbox is searchable by name."""
+        name = centre_name_map.get(code, "")
+        return f"{name}  [{code}]" if name else code
+    # ── Build route adjacency (source → set of valid destinations) ──────
+    route_pairs = corridor_df[["source_center", "destination_center"]].drop_duplicates()
+    #src_to_dsts = route_pairs.groupby("source_center")["destination_center"].apply(lambda x: sorted(set(x))).to_dict()
+
+    src_to_dsts = {}
+    for src, dst in zip(corridor_df["source_center"], corridor_df["destination_center"]):
+        if src != dst:                         # exclude self-loops
+            src_to_dsts.setdefault(src, set()).add(dst)
+    # convert sets to sorted lists for selectbox
+    src_to_dsts = {k: sorted(v, key=fmt_centre) for k, v in src_to_dsts.items()}
+    all_sources = sorted(set(corridor_df["source_center"]))
+
+    #facilities_s = sorted(set(corridor_df["source_center"]) )
+    #facilities_d = sorted(set(corridor_df["destination_center"]))
+    #route_types = list(corridor_df["route_type"].unique())
     time_labels = {0: "Night", 1: "Morning", 2: "Afternoon", 3: "Evening"}
     
     c1, c2 = st.columns(2)
     with c1:
-            source_center = st.selectbox( "Source hub",facilities_s,accept_new_options=False)
+            source_center = st.selectbox( "Source hub",all_sources, format_func=fmt_centre,accept_new_options=False)
+                                         #facilities_s,accept_new_options=False)
 
             source_name = df.loc[df["source_center"] == source_center,"source_name"].dropna().unique()
 
-            if len(source_name) > 0:
-                  st.write(source_name[0])
-            else:
-               st.warning("Source name not found.")
+            # if len(source_name) > 0:
+            #       st.write(source_name[0])
+            # else:
+            #    st.warning("Source name not found.")
 
-
-            destination_center = st.selectbox("Destination hub", facilities_d, accept_new_options=False)
+            valid_destinations = src_to_dsts.get(source_center, [])
+            if not valid_destinations:
+               st.warning("No routes found from this source centre. Showing all destinations.")
+            #valid_destinations = sorted(set(corridor_df["destination_center"]))
+            valid_destinations = src_to_dsts.get(source_center, [])
+            destination_center = st.selectbox("Destination hub", valid_destinations,
+            format_func=fmt_centre,accept_new_options=False)
+                                              #facilities_d, accept_new_options=False)
             destination_name = df.loc[ df["destination_center"] == destination_center,"destination_name"].dropna().unique()
 
-            if len(destination_name) > 0:
-               st.write(destination_name[0])
-            else:
-               st.warning("Destination name not found.")
+            # if len(destination_name) > 0:
+            #    st.write(destination_name[0])
+            # else:
+            #    st.warning("Destination name not found.")
 
+            route_count = len(corridor_df[
+            (corridor_df["source_center"] == source_center) &
+            (corridor_df["destination_center"] == destination_center)
+        ])
+        
 
             if source_center == destination_center:
                   st.error("Source and destination are the same — pick two different hubs.")
