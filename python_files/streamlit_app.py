@@ -403,12 +403,12 @@ elif page == "Decision Framework":
         "Enter a shipment's parameters to get a cost/risk-based route recommendation, "
         "backed by the trained ETA model and the network's structural risk scores."
     )
-    _src_names = df[["source_center", "source_name"]].drop_duplicates().dropna()
-    _dst_names = df[["destination_center", "destination_name"]].drop_duplicates().dropna()
+    src_names = df[["source_center", "source_name"]].drop_duplicates().dropna()
+    dst_names = df[["destination_center", "destination_name"]].drop_duplicates().dropna()
     centre_name_map = {}
-    for _, row in _src_names.iterrows():
+    for _, row in src_names.iterrows():
         centre_name_map[row["source_center"]] = row["source_name"]
-    for _, row in _dst_names.iterrows():
+    for _, row in dst_names.iterrows():
         if row["destination_center"] not in centre_name_map:
             centre_name_map[row["destination_center"]] = row["destination_name"]
     def fmt_centre(code):
@@ -429,23 +429,15 @@ elif page == "Decision Framework":
     c1, c2 = st.columns(2)
     with c1:
             source_center = st.selectbox( "Source hub",all_sources, format_func=fmt_centre,accept_new_options=False)
-                                         #facilities_s,accept_new_options=False)
 
             source_name = df.loc[df["source_center"] == source_center,"source_name"].dropna().unique()
-
-            # if len(source_name) > 0:
-            #       st.write(source_name[0])
-            # else:
-            #    st.warning("Source name not found.")
 
             valid_destinations = src_to_dsts.get(source_center, [])
             if not valid_destinations:
                st.warning("No routes found from this source centre. Showing all destinations.")
-            #valid_destinations = sorted(set(corridor_df["destination_center"]))
             valid_destinations = src_to_dsts.get(source_center, [])
             destination_center = st.selectbox("Destination hub", valid_destinations,
             format_func=fmt_centre,accept_new_options=False)
-                                              #facilities_d, accept_new_options=False)
             destination_name = df.loc[ df["destination_center"] == destination_center,"destination_name"].dropna().unique()
 
             route_count = len(corridor_df[
@@ -474,7 +466,7 @@ elif page == "Decision Framework":
         ftl_median = ftl_results[(ftl_results["source_center"]==source_center) & (ftl_results["destination_center"]==destination_center)]["graph_prediction"].median()
         
         if pd.isna(ftl_median):
-            pred_etl_ftl = predict_dynamic_eta(model_f, graph_f, ftl_df, source_center, destination_center, node_mapping_f, scaler_f)
+            pred_etl_ftl = np.round(predict_dynamic_eta(model_f, graph_f, ftl_df, source_center, destination_center, node_mapping_f, scaler_f),2)
         else:
             pred_etl_ftl = ftl_median
             
@@ -482,7 +474,7 @@ elif page == "Decision Framework":
         cart_median = cart_results[(cart_results["source_center"]==source_center) & (cart_results["destination_center"]==destination_center)]["graph_prediction"].median()
         
         if pd.isna(cart_median):
-            pred_etl_carting = predict_dynamic_eta(model_c, graph_c, cart_df, source_center, destination_center, node_mapping_c, scaler_c)
+            pred_etl_carting = np.round(predict_dynamic_eta(model_c, graph_c, cart_df, source_center, destination_center, node_mapping_c, scaler_c),2)
         else:
             pred_etl_carting = cart_median
         framework = RouteDecisionFramework(hub_risk_lookup=risk_lookup,sla_penalty_per_hour=sla_penalty) 
@@ -516,12 +508,12 @@ elif page == "Decision Framework":
                 <div style="background: rgba(79,195,247,0.1); border-radius: 10px; padding: 1rem; text-align: center;">
                     <div style="color: #8B949E; font-size: 0.8rem;">FTL ETA</div>
                     <div style="color: #4FC3F7; font-size: 1.4rem; font-weight: 700;">{decision['predicted_ETA_FTL']} hrs</div>
-                    <div style="color: #8B949E; font-size: 0.8rem; margin-top: 0.3rem;">₹{decision['Est_Cost_per_Unit_FTL']}/pkg</div>
+                    <div style="color: #8B949E; font-size: 0.8rem; margin-top: 0.3rem;">₹{decision['Est_Cost_per_Unit_FTL']}/kg</div>
                 </div>
                 <div style="background: rgba(0,191,165,0.1); border-radius: 10px; padding: 1rem; text-align: center;">
                     <div style="color: #8B949E; font-size: 0.8rem;">Carting ETA</div>
                     <div style="color: #00BFA5; font-size: 1.4rem; font-weight: 700;">{decision['predicted_ETA_Carting']} hrs</div>
-                    <div style="color: #8B949E; font-size: 0.8rem; margin-top: 0.3rem;">₹{decision['Est_Cost_per_Unit_Carting']}/pkg</div>
+                    <div style="color: #8B949E; font-size: 0.8rem; margin-top: 0.3rem;">₹{decision['Est_Cost_per_Unit_Carting']}/kg</div>
                 </div>
             </div>
             <div style="text-align: center; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1);">
